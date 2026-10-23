@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import ExpoModulesCore
+import SwiftUI
 
 public enum OpenURLInbox {
   static var pending: [String] = []
@@ -1424,6 +1425,7 @@ public class VisualEffectModule: Module {
     View(VisualEffect.self) {
       Events("onDismiss")
       Prop("dismissEnabled") { (view: VisualEffect, enabled: Bool) in view.dismissEnabled = enabled }
+      Prop("liquidGlass") { (view: VisualEffect, enabled: Bool) in view.liquidGlass = enabled }
       Prop("pointerEdge") { (view: VisualEffect, edge: String?) in view.pointerEdge = edge }
       Prop("pointerX") { (view: VisualEffect, x: Double) in view.pointerX = x }
       Prop("dark") { (view: VisualEffect, dark: Bool?) in view.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil }
@@ -1438,6 +1440,9 @@ public class VisualEffectModule: Module {
 
 final class VisualEffect: ExpoView {
   let effect = NSVisualEffectView()
+  var liquidGlass = false { didSet { if liquidGlass != oldValue { applyCorners() } } }
+  private var glassHost: NSView?
+  private var glassState: BubbleGlassState?
   var cornerRadius: Double = 0 { didSet { applyCorners() } }
   var pointerEdge: String? { didSet { applyCorners(); updateDismissMonitor() } }
   let onDismiss = EventDispatcher()
@@ -1524,6 +1529,12 @@ final class VisualEffect: ExpoView {
 
   private func applyCorners() {
     guard bounds.width > 0, bounds.height > 0 else { return }
+    if #available(macOS 26.0, *), liquidGlass, pointerEdge == "top" || pointerEdge == "bottom" {
+      applyLiquidGlass()
+      return
+    }
+    glassHost?.isHidden = true
+    effect.isHidden = false
     guard pointerEdge == "top" || pointerEdge == "bottom" else {
       effect.maskImage = nil
       effect.layer?.cornerRadius = cornerRadius
@@ -1577,6 +1588,31 @@ final class VisualEffect: ExpoView {
     CATransaction.commit()
   }
 
+  @available(macOS 26.0, *)
+  private func applyLiquidGlass() {
+    effect.isHidden = true
+    bubbleShadow.isHidden = true
+    bubbleRim.isHidden = true
+    let state = BubbleGlassState(size: bounds.size, radius: cornerRadius, pointerX: pointerX, pointerEdge: pointerEdge, dark: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+    let host: NSHostingView<BubbleGlassBackground>
+    if let existing = glassHost as? NSHostingView<BubbleGlassBackground> {
+      host = existing
+      if glassState != state {
+        host.rootView = BubbleGlassBackground(path: Path(bubblePath(in: bounds, flipped: true)), dark: state.dark)
+      }
+    } else {
+      host = NSHostingView(rootView: BubbleGlassBackground(path: Path(bubblePath(in: bounds, flipped: true)), dark: state.dark))
+      host.sizingOptions = []
+      host.safeAreaRegions = []
+      host.clipsToBounds = false
+      addSubview(host)
+      glassHost = host
+    }
+    glassState = state
+    host.frame = bounds
+    host.isHidden = false
+  }
+
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     applyCorners()
@@ -1589,6 +1625,35 @@ final class VisualEffect: ExpoView {
   }
 
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private struct BubbleGlassState: Equatable {
+  let size: CGSize
+  let radius: Double
+  let pointerX: Double
+  let pointerEdge: String?
+  let dark: Bool
+}
+
+@available(macOS 26.0, *)
+private struct BubbleGlassShape: Shape {
+  let outline: Path
+
+  func path(in rect: CGRect) -> Path { outline }
+}
+
+@available(macOS 26.0, *)
+private struct BubbleGlassBackground: SwiftUI.View {
+  let path: Path
+  let dark: Bool
+
+  var body: some SwiftUI.View {
+    Color.clear
+      .glassEffect(.regular, in: BubbleGlassShape(outline: path))
+      .environment(\.colorScheme, dark ? .dark : .light)
+      .ignoresSafeArea()
+      .allowsHitTesting(false)
+  }
 }
 
 public class GlassEffectModule: Module {

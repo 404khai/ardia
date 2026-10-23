@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { downloadsGeometry } from "./downloadsGeometry.ts";
 
-test("top strip pointer stays directly under the button at the window edge", () => {
+test("top strip pointer clears the corner while staying under the button", () => {
   const panel = downloadsGeometry({ width: 800, height: 600 }, { x: 775, y: 4, height: 34 }, false);
-  assert.equal(panel.left + panel.pointerX, 775);
+  assert.ok(Math.abs(panel.left + panel.pointerX - 775) <= 17);
+  assert.ok(panel.pointerX <= panel.width - 32);
   assert.equal(panel.edge, 40);
   assert.equal(panel.below, true);
   assert.ok(panel.left + panel.width <= 792);
@@ -21,7 +22,8 @@ test("footer opens upward and keeps its pointer aligned near the left edge", () 
   const panel = downloadsGeometry({ width: 800, height: 600 }, { x: 23, y: 561, height: 34 }, true);
   assert.equal(panel.below, false);
   assert.equal(panel.edge, 41);
-  assert.equal(panel.left + panel.pointerX, 23);
+  assert.ok(Math.abs(panel.left + panel.pointerX - 23) <= 17);
+  assert.equal(panel.pointerX, 32);
 });
 
 test("short windows constrain the list while retaining header and footer", () => {

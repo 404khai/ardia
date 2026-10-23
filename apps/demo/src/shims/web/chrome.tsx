@@ -82,6 +82,7 @@ const MATERIAL_FILL: Record<string, string> = {
 };
 
 export type VisualEffectProps = ViewProps & {
+  liquidGlass?: boolean;
   material?: string;
   blendingMode?: "withinWindow" | "behindWindow";
   cornerRadius?: number;
@@ -92,7 +93,7 @@ export type VisualEffectProps = ViewProps & {
   onDismiss?: () => void;
 };
 
-export function VisualEffect({ material = "popover", blendingMode: _blendingMode, cornerRadius, pointerEdge, pointerX: _pointerX, dark, dismissEnabled = true, onDismiss, style, ...props }: VisualEffectProps) {
+export function VisualEffect({ liquidGlass: _liquidGlass, material = "popover", blendingMode: _blendingMode, cornerRadius, pointerEdge, pointerX: _pointerX, dark, dismissEnabled = true, onDismiss, style, ...props }: VisualEffectProps) {
   const host = useRef<HTMLElement | null>(null);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;

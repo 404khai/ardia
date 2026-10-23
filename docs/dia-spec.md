@@ -956,3 +956,9 @@ model at 120 Hz ticks: 26–36 % of the way at 0.1 s, 58–73 % at 0.25 s, 92–
   (a, b clamped from `self+0x14` / `self+0x94`), each lit or unlit by its dot product with the light direction
   (−0.2, −1, −0.55)/√1.34, joined into a closed CGPath: the unlit crescent of the rim. Not rendered at 84 pt yet.
 - Light appearance of everything above (the user's Dia runs dark).
+
+## Downloads bubble (owner reference, 2026-10-23)
+
+The owner supplied a 614×858 pixel Dia screenshot. These are image pixels, not screen points: the body spans approximately x65–585, y100–831 (520 wide), the pointer peaks near x326/y80, and file-row centres are approximately 74 pixels apart. Normalizing by panel width gives row height 0.142, filename left inset about 0.156, and file icons roughly 0.05 of the width. At our 320 pt panel width those ratios suggest about 46 pt rows, a 50 pt filename inset and 16–22 pt icons. The reference shows smoked translucency, blurred content through the body and pointer, a luminous inset edge and rounded Finder badges.
+
+The first downloads PR implementation used an older `NSVisualEffectView` with a manually drawn rim. This is a native blur, but it does not use the Liquid Glass material that the address bar already uses. In-process layer snapshots also flatten backdrop effects; they cannot prove the live material matches Dia. The corrected macOS 26+ background uses the public SwiftUI `glassEffect(_:in:)` API with one custom bubble shape, including its pointer, and lets the system render its edge and depth. Older macOS retains the AppKit blur fallback. Edge pointers stay clear of the body corners while still pointing into the 34 pt download control. WindowServer captures of the corrected hidden app confirm translucency and backdrop blur in the header, footer and top-strip layouts. Exact visual fidelity and animation remain for the owner’s in-app review; passing geometry and state tests is not a visual parity claim.

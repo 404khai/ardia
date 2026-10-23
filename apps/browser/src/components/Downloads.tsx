@@ -122,7 +122,7 @@ export const FileIcon = memo(function FileIcon({ path, size = 28 }: { path: stri
 
 const HEADER = 38;
 const ROW = 48;
-const FILE_ICON = 32;
+const FILE_ICON = 22;
 const ROW_BUTTON = 26;
 const POINTER = 10;
 const RADIUS = 18;
@@ -199,10 +199,10 @@ function DownloadsPanel({ windowId, closing, onClosed }: { windowId: string; clo
           ],
         }}
       >
-        <VisualEffect material="popover" dark={theme.dark} cornerRadius={RADIUS} pointerEdge={below ? "top" : "bottom"} pointerX={pointerX} dismissEnabled={!closing} onDismiss={() => setOpen(false)} style={StyleSheet.absoluteFill} />
+        <VisualEffect liquidGlass material="popover" dark={theme.dark} cornerRadius={RADIUS} pointerEdge={below ? "top" : "bottom"} pointerX={pointerX} dismissEnabled={!closing} onDismiss={() => setOpen(false)} style={StyleSheet.absoluteFill} />
         <View style={{ paddingTop: 8, paddingBottom: 7 }}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: PANEL.inset, paddingRight: PANEL.inset, height: HEADER }}>
-            <Text style={{ flex: 1, fontSize: PANEL.subtitleSize, fontWeight: "600", letterSpacing: 0.7, color: theme.textSecondary }}>
+            <Text style={{ flex: 1, fontSize: 12.5, fontWeight: "600", letterSpacing: 0.2, color: theme.textSecondary }}>
               RECENT DOWNLOADS
             </Text>
             {clearable && (
@@ -273,7 +273,7 @@ function FooterButton({ title, onPress }: { title: string; onPress: () => void }
               backgroundColor: rowFill(theme.dark, hovered, pressed),
             }}
           >
-            <Text style={{ flex: 1, fontSize: PANEL.titleSize, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
+            <Text style={{ flex: 1, fontSize: 14, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
             <Symbol name="arrow.up.right" size={12} weight="semibold" color={theme.icon} style={{ width: 12, height: 12, marginRight: 1 }} />
           </View>
         )}
@@ -283,7 +283,7 @@ function FooterButton({ title, onPress }: { title: string; onPress: () => void }
 }
 
 function RowButton({ icon, onPress, tooltip }: { icon: string; onPress: () => void; tooltip: string }) {
-  return <IconButton icon={icon} size={PANEL.iconSize} box={ROW_BUTTON} radius={6} onPress={onPress} tooltip={tooltip} />;
+  return <IconButton icon={icon} size={icon === "magnifyingglass.circle.fill" ? 16 : PANEL.iconSize} box={ROW_BUTTON} radius={6} onPress={onPress} tooltip={tooltip} />;
 }
 
 const DownloadRowItem = memo(function DownloadRowItem({ id, windowId }: { id: string; windowId: string }) {
@@ -323,7 +323,7 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: 12,
+                  gap: 10,
                   paddingHorizontal: PANEL.rowPadding,
                   height: ROW,
                   borderRadius: 10,
@@ -337,9 +337,9 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
                   <Text
                     numberOfLines={1}
                     style={{
-                      fontSize: PANEL.titleSize,
+                      fontSize: 14,
                       fontWeight: "500",
-                      lineHeight: PANEL.titleLine,
+                      lineHeight: 18,
                       color: exists ? theme.textPrimary : theme.textSecondary,
                       textDecorationLine: exists ? "none" : "line-through",
                     }}
@@ -370,7 +370,7 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
                     <RowButton icon="xmark.circle.fill" onPress={() => void cancelDownload(d.id)} tooltip="Cancel" />
                   </View>
                 ) : done ? (
-                  <RowButton icon="magnifyingglass" onPress={() => void revealFile(d.path)} tooltip="Show in Finder" />
+                  <RowButton icon="magnifyingglass.circle.fill" onPress={() => void revealFile(d.path)} tooltip="Show in Finder" />
                 ) : null}
               </View>
             )}
