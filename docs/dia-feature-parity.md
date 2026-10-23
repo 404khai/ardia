@@ -482,7 +482,7 @@ own sign-ins instead.
 ## 14. Downloads
 | Feature | Dia | Ardia | Gap |
 |---|---|---|---|
-| Downloads panel (⇧⌘J, toolbar button) | ✓ | ✅ | our popover; Chrome's download bubble is off per profile (ledger 25) |
+| Downloads panel (⇧⌘J, toolbar button) | ✓ | ✅ | Dia-inspired material bubble (2026-10-23): one native AppKit popover blur across the rounded body and integrated pointer, light rim and soft shadow; measured toolbar/footer anchor, edge-aware placement and bounded scrolling; rounded Clear, file icons, persistent Finder controls, progress/paused/error/empty states, upward-arrow footer. Click outside or Escape dismisses without moving focus; profile tooltips are suppressed while open. Native API 13. Native build, geometry/private-download checks and hidden-instance real download, hover stability, outside-click/Escape dismissal and layout captures verified. In-process captures cannot judge live backdrop blur; the isolated preview app is ready for that visual check. Chrome's download bubble is off per profile (ledger 25) |
 | Progress, cancel, open, Show in Finder, clear | ✓ | ✅ | |
 | Pause / resume | ✓ | ✅ | |
 | Open when done; move to Trash | ✓ | ✅ | "Open When Done" isn't remembered across a relaunch |

@@ -1,3 +1,4 @@
+import { DownloadsButton } from "./downloadsAnchor";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@ardia/shell";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
@@ -106,17 +107,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
         </View>
         <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8, top: MID - 17, flexDirection: "row", alignItems: "center", gap: CONTROLS_GAP }}>
           <ProfileIndicator room={PROFILE_ROOM} />
-          <IconButton
-            icon="arrow.down.circle"
-            size={16}
-            box={DOWNLOADS_BOX}
-            radius={10}
-            tooltip="Downloads (⇧⌘J)"
-            onPress={() => {
-              const s = useBrowser.getState();
-              s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-            }}
-          />
+          <DownloadsButton windowId={windowId} visible={!hidden && (!floating || swipe)} />
         </View>
         {swipe && <ProfileSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
         {!floating && <StripDropHighlight left={left} right={right} />}
@@ -1338,7 +1329,13 @@ const PEEK_TOP = 4;
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const { slide, live, show, hide } = usePeek(enabled);
+  const downloadsOpen = useBrowser((s) => !!s.windowUi[windowId]?.downloadsOpen);
+  const { slide, live, show, hide } = usePeek(enabled, false, () => !!useBrowser.getState().windowUi[windowId]?.downloadsOpen);
+  const hadDownloads = useRef(downloadsOpen);
+  useEffect(() => {
+    if (hadDownloads.current && !downloadsOpen) hide();
+    hadDownloads.current = downloadsOpen;
+  }, [downloadsOpen]);
   useEffect(() => {
     if (!enabled) return;
     void setTrafficLightsCenter(windowId, lightsCenter(layout.sidebarWidth));
