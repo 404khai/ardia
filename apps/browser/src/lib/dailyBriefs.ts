@@ -1,5 +1,6 @@
-import { readDocument, writeDocument } from "@ardia/shell";
+import { cancelDailyBriefGeneration, generateDailyBrief, readDocument, writeDocument } from "@ardia/shell";
 import { create } from "zustand";
+import { collectBriefContext, generateClaudeBrief } from "../components/settings/briefContext";
 import { useBrowser } from "../store/browser";
 import { isIncognitoProfile } from "../store/model";
 import { briefDateFromUrl, briefDue, localBriefDate } from "./briefDates";
@@ -73,12 +74,10 @@ export async function generateBrief(profileId: string, date: string) {
   const unsubscribe = useBrowser.subscribe((state) => {
     if (state.settings.dailyBriefProvider === provider && JSON.stringify(state.settings.dailyBriefSources) === consent) return;
     abort.abort();
-    if (provider === "chatgpt") void import("@ardia/shell").then((shell) => shell.cancelDailyBriefGeneration()).catch(() => {});
+    if (provider === "chatgpt") void Promise.resolve().then(cancelDailyBriefGeneration).catch(() => {});
   });
   try {
     if (date !== localBriefDate()) throw new Error("Past briefs are kept as they were. Generate today’s brief to use your current sources.");
-    const { generateDailyBrief } = await import("@ardia/shell");
-    const { collectBriefContext, generateClaudeBrief } = await import("../components/settings/briefContext");
     const context = await collectBriefContext(date);
     if (abort.signal.aborted || provider !== useBrowser.getState().settings.dailyBriefProvider || consent !== JSON.stringify(useBrowser.getState().settings.dailyBriefSources)) throw new Error("Your sharing preferences changed. Try again.");
     const input = JSON.stringify({ ...context, date });

@@ -681,12 +681,40 @@ private func drawBriefRail(_ text: String, bounds: NSRect, fontSize: Double, clo
   NSGraphicsContext.restoreGraphicsState()
 }
 
-final class BriefRailView: ExpoView {
+private final class BriefRailCanvas: NSView {
   var text = "" { didSet { needsDisplay = true } }
   var fontSize: Double = 45 { didSet { needsDisplay = true } }
   var clockwise = false { didSet { needsDisplay = true } }
-  override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); needsDisplay = true }
+  override var isFlipped: Bool { true }
   override func draw(_ dirtyRect: NSRect) { drawBriefRail(text, bounds: bounds, fontSize: fontSize, clockwise: clockwise) }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+final class BriefRailView: ExpoView {
+  private let canvas = BriefRailCanvas()
+  var text = "" { didSet { canvas.text = text } }
+  var fontSize: Double = 45 { didSet { canvas.fontSize = fontSize } }
+  var clockwise = false { didSet { canvas.clockwise = clockwise } }
+
+  required init(appContext: AppContext? = nil) {
+    super.init(appContext: appContext)
+    canvas.wantsLayer = true
+    canvas.layerContentsRedrawPolicy = .onSetNeedsDisplay
+    addSubview(canvas)
+  }
+
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize)
+    canvas.frame = bounds
+    canvas.needsDisplay = true
+  }
+
+  override func layout() {
+    super.layout()
+    canvas.frame = bounds
+    canvas.needsDisplay = true
+  }
+
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 

@@ -44,6 +44,9 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
   const railGutter = Math.max(50, Math.min(100, width * 0.13));
   const contentWidth = Math.min(1040, width - (rails ? railGutter * 2 : wide ? 80 : 40));
   const heroHeight = contentWidth * 0.507;
+  const artworkScale = Math.max(contentWidth / artwork.width, heroHeight / artwork.height);
+  const artworkWidth = artwork.width * artworkScale;
+  const artworkHeight = artwork.height * artworkScale;
   const gutter = (width - contentWidth) / 2;
   const railWidth = Math.min(65, gutter - 12);
   const railInset = (gutter - railWidth) / 2;
@@ -66,7 +69,7 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, index) => <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Preview ${label}`} accessibilityState={{ selected: day.getDay() === index }} onPress={() => setPreviewWeekday(index)} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: day.getDay() === index ? "#ffe500" : "#232321" }}><Text style={{ fontSize: 12, color: day.getDay() === index ? "#101010" : "#cccac4" }}>{label}</Text></Pressable>)}
         </View>}
         <View style={{ width, height: heroHeight, justifyContent: "center", alignItems: "center" }}>
-          <Image source={artwork.source} style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight }} resizeMode="cover" accessibilityLabel={`${artwork.title} by ${artwork.artist}`} />
+          <View style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, overflow: "hidden" }}><Image source={artwork.source} style={{ position: "absolute", top: (heroHeight - artworkHeight) / 2, left: (contentWidth - artworkWidth) / 2, width: artworkWidth, height: artworkHeight }} resizeMode="cover" accessibilityLabel={`${artwork.title} by ${artwork.artist}`} /></View>
           <View pointerEvents="none" style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, backgroundColor: "rgba(0,0,0,0.09)" }} />
           <Text style={[styles.heroThe, { fontSize: contentWidth / 18, lineHeight: contentWidth / 15 }]}>The</Text>
           <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroTitle, { fontSize: titleSize, lineHeight: titleSize * 1.2, width: contentWidth * 0.98 }]}>{weekday} Brief</Text>
@@ -115,7 +118,10 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{content ? content.events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.time}</Text><Text style={[styles.eventName, { flex: 1 }]}>{event.title}</Text></View>) : preview && <View style={styles.calendarEvent}><Text style={styles.eventTime}>12:15p</Text><Text style={styles.eventName}>Bachs Intro</Text></View>}</View>
           <View style={styles.rightColumn}>{content ? content.events.length ? content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>) : <Text style={[styles.body, { marginTop: wide ? 48 : 0 }]}>No events to prepare for.</Text> : <><Text style={[styles.itemTitle, { marginTop: wide ? 48 : 0 }]}>{preview ? "Bachs Intro — 12:15 PM – 12:30 PM" : "Make space for your day"}</Text><Text style={styles.body}>{preview ? "15-minute introductory call via Google Meet." : "Connect your calendar to see your schedule and prepare for what’s next."}</Text>{preview && <View style={{ alignItems: "flex-end", marginTop: 28 }}><Starburst title="Prep me →" small onPress={() => setPrep(!prep)} /></View>}{prep && preview && <Text style={styles.actionDetail}>Before the call: review the invitation, write down your goals, and leave a few minutes to join.</Text>}</>}</View>
         </View>
-        <View style={styles.footer}><View style={styles.footerBrand}><Text style={styles.footerText}>Made for you by </Text><Image source={require("../../../assets/briefs/ardia-mark.png")} style={styles.footerLogo} resizeMode="contain" accessibilityLabel="Ardia" /><Text style={styles.footerText}>Ardia using your </Text><View style={styles.footerService}><Image source={require("../../../assets/site-icons/github.png")} style={[styles.footerServiceIcon, { tintColor: "#eeeeeb" }]} resizeMode="contain" /><Text style={styles.footerText}>GitHub, </Text></View><View style={styles.footerService}><Image source={require("../../../assets/site-icons/gmail.png")} style={styles.footerServiceIcon} resizeMode="contain" /><Text style={styles.footerText}>Gmail, </Text></View><Text style={styles.footerText}>and </Text><View style={styles.footerService}><Image source={require("../../../assets/site-icons/calendar.png")} style={styles.footerServiceIcon} resizeMode="contain" /><Text style={styles.footerText}>Google Calendar.</Text></View></View><Text style={styles.footerSmall}>{preview && !content ? "Preview content · No accounts connected" : "Your sources, with your permission."}</Text></View>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <Image source={require("../../../assets/site-icons/github.png")} style={{ width: 20, height: 20, tintColor: "#eeeeeb" }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <Image source={require("../../../assets/site-icons/gmail.png")} style={{ width: 22, height: 18 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <Image source={require("../../../assets/site-icons/calendar.png")} style={{ width: 20, height: 20 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
+          <Text style={styles.footerSmall}>{preview && !content ? "Preview content · No accounts connected" : "Your sources, with your permission."}</Text>
+        </View>
         </View>
       </View>
     </ScrollView>
@@ -157,11 +163,8 @@ const styles = StyleSheet.create({
   eventTime: { fontFamily: "Menlo", fontSize: 12, color: "#777166" },
   eventName: { color: "#e5e5e1", fontSize: 15, fontWeight: "600" },
   footer: { marginTop: 70, alignItems: "center", gap: 20, paddingHorizontal: 10 },
-  footerBrand: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
-  footerLogo: { width: 24, height: 24, marginHorizontal: 5 },
-  footerService: { flexDirection: "row", alignItems: "center" },
-  footerServiceIcon: { width: 18, height: 18, marginRight: 5 },
   footerText: { color: "#8d8a82", fontFamily: "Georgia", fontSize: 20, textAlign: "center", lineHeight: 30 },
+  footerName: { color: "#eeeeeb" },
   footerSmall: { color: "#65625b", fontFamily: "Georgia", fontSize: 13 },
   setupButton: { alignSelf: "flex-start", marginTop: 20, borderBottomWidth: 1, borderBottomColor: "#ffe500", paddingBottom: 3 },
   setupButtonText: { color: "#ffe500", fontSize: 14 },
