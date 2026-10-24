@@ -71,6 +71,13 @@ export type Settings = {
   openLinksInLittleArdia: boolean;
   littleArdiaSize: [number, number];
 
+  dailyBriefEnabled: boolean;
+  dailyBriefTime: string;
+  dailyBriefProvider: "chatgpt" | "claude";
+  dailyBriefDelivery: "scheduled" | "onOpen";
+  dailyBriefLastOpened: string;
+  dailyBriefSources: { gmail: boolean; calendar: boolean; github: boolean };
+
   chosen?: string[];
   inferred?: string[];
 };
@@ -129,6 +136,12 @@ export const DEFAULT_SETTINGS: Settings = {
   shortcuts: {},
   openLinksInLittleArdia: true,
   littleArdiaSize: [900, 640],
+  dailyBriefEnabled: false,
+  dailyBriefTime: "08:00",
+  dailyBriefProvider: "chatgpt",
+  dailyBriefDelivery: "scheduled",
+  dailyBriefLastOpened: "",
+  dailyBriefSources: { gmail: false, calendar: false, github: false },
 };
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];

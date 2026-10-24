@@ -12,6 +12,7 @@ import { PANES, setting } from "./settingsIndex";
 import { SettingsSearchField, SettingsSearchResults } from "./SettingsSearch";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
+import { DailyBriefsPane } from "./panes/DailyBriefs";
 import { CalendarPane } from "./panes/Calendar";
 import { GeneralPane } from "./panes/General";
 import { LiveFoldersPane } from "./panes/LiveFolders";
@@ -176,6 +177,8 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
       return <LiveFoldersPane />;
     case "calendar":
       return <CalendarPane />;
+    case "dailyBriefs":
+      return <DailyBriefsPane />;
     case "advanced":
       return <AdvancedPane />;
   }

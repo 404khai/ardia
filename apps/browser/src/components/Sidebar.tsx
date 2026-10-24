@@ -40,7 +40,7 @@ import { pinGridHeight } from "./sidebar/pinZone";
 import { ResizeHandle } from "./sidebar/ResizeHandle";
 import { SCROLL_EDGE, ScrollEdgeLine, useScrollEdge } from "./sidebar/ScrollEdge";
 import { entriesHeight, firstPaintEntries, rowSpan, startsOffScreen, type Section } from "./sidebar/geometry";
-import { measureRow } from "./sidebar/state";
+import { measureRow, setSidebarUi, useSidebarUi } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { closeFolderPanel } from "./sidebar/tileFolderUi";
 import { useSidebarTokens } from "./sidebar/tokens";
@@ -79,7 +79,7 @@ export function Sidebar({ width }: { width: number }) {
   const hasDownloads = useBrowser((s) => downloadsIn(s, windowId).length > 0);
   const dots = useProfileDotsShown();
   const footerDownloads = addressBar && hasDownloads;
-  const footer = dots || footerDownloads ? PROFILE_DOTS_HEIGHT : 0;
+  const footer = PROFILE_DOTS_HEIGHT;
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useRevealTabs(windowId, scroll, scrollY, geometry);
@@ -148,6 +148,7 @@ export function Sidebar({ width }: { width: number }) {
           {footer ? (
             <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
               {dots ? <ProfileDots windowId={windowId} /> : null}
+              <BriefArchiveButton windowId={windowId} />
               {footerDownloads ? (
                 <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
                   <DownloadsButton windowId={windowId} />
@@ -186,6 +187,12 @@ export function Sidebar({ width }: { width: number }) {
       )}
     </DragProvider>
   );
+}
+
+function BriefArchiveButton({ windowId }: { windowId: string }) {
+  const theme = useTheme();
+  const open = useSidebarUi((s) => s.briefArchive === windowId);
+  return <Pressable accessibilityRole="button" accessibilityLabel="Daily brief archive" tooltip="Daily Briefs" onPress={() => setSidebarUi({ briefArchive: open ? null : windowId })} style={{ position: "absolute", left: 13, bottom: 5, width: 31, height: 31, alignItems: "center", justifyContent: "center", borderRadius: 7, backgroundColor: open ? theme.tabHover : "transparent" }}><Symbol name="doc.text" size={19} color={theme.textSecondary} /></Pressable>;
 }
 
 type PageProps = {

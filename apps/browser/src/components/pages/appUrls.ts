@@ -23,6 +23,8 @@ const PANES: Record<string, SettingsPane> = {
   shortcuts: "shortcuts",
   livefolders: "liveFolders",
   calendar: "calendar",
+  dailybriefs: "dailyBriefs",
+  providers: "dailyBriefs",
   advanced: "advanced",
 };
 

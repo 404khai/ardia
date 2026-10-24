@@ -1,6 +1,6 @@
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@ardia/shell";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
+import { Animated, Pressable, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -17,6 +17,10 @@ import { dismissHover, useRowHover } from "./hover";
 import { openTabMenu } from "./menus";
 import { ACTIVE, LOADING, PLAYING, SELECTED, useRowState } from "./rowState";
 import { registerRow, useSidebarUi } from "./state";
+import { briefTitleForDate } from "../briefs/assets";
+import { BriefTabThumbnail } from "../briefs/BriefTabThumbnail";
+import { briefDateFromUrl } from "../../lib/briefDates";
+import { internalPageOf, tabDestination } from "../pages/urls";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarTokens } from "./tokens";
@@ -64,9 +68,11 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
   const [moved, movedRef] = useShift(shift, useCallback((v: View | null) => registerRow(windowId, tabId, v), [windowId, tabId]));
   const backToPin = useHover();
   if (!tab) return null;
+  const isBrief = internalPageOf(tabDestination(tab)) === "brief";
+  const briefDate = isBrief ? briefDateFromUrl(tabDestination(tab)) : "";
   const resettable = isPinnedRow(tab) && awayFromPin(tab);
   const resetting = resettable && backToPin.hovered && !renaming;
-  const title = resetting ? "Back to Pinned URL" : tabTitle(tab);
+  const title = resetting ? "Back to Pinned URL" : isBrief ? tab.customTitle || briefTitleForDate(briefDate) : tabTitle(tab);
   const fill = active ? theme.tabSelected : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
   const border = active || selected ? 0.5 : 0;
 
@@ -86,6 +92,7 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
           }}
         >
           <Pressable
+            tooltip={title}
             onPress={(e) => {
               dismissHover();
               clickTab(windowId, tabId, clickMods(e));
@@ -104,7 +111,9 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
                 shadowOffset={[0, 0.5]}
                 style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
               >
-                {resettable ? (
+                {isBrief ? (
+                  <Symbol name="doc" size={17} color={active ? theme.tabSelectedText : theme.icon} style={{ width: 16, height: 20 }} />
+                ) : resettable ? (
                   <View {...backToPin.hoverProps}>
                     <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tab.id)} tooltip="Back to Pinned URL (⌘↩)">
                       {resetting ? (
@@ -138,8 +147,9 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
                     onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
                   />
                 ) : (
-                  <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
+                  <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, minWidth: 0, height: 18, marginLeft: 5 }} />
                 )}
+                {isBrief && !renaming && <BriefTabThumbnail date={briefDate} hovered={hovered} />}
                 <HoverSlot
                   hovered={hovered && !renaming}
                   width={22}

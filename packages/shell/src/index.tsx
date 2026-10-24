@@ -374,6 +374,8 @@ export type FadeLabelProps = ViewProps & {
 
 export const FadeLabel = requireNativeViewManager<FadeLabelProps>("ArdiaFadeLabel");
 
+export const BriefRail = requireNativeViewManager<ViewProps & { text: string; fontSize: number; clockwise?: boolean }>("ArdiaBriefRail");
+
 export const ActivitySpinner = requireNativeViewManager<ViewProps>("ArdiaActivitySpinner");
 
 export type ContextMenuAreaProps = ViewProps & {
@@ -490,3 +492,6 @@ type TranslationModule = {
 const TranslationNative = requireNativeModule<TranslationModule>("ArdiaTranslate");
 
 export const translation: Omit<TranslationModule, "available"> | null = TranslationNative.available ? TranslationNative : null;
+
+export { connectChatGPT, cancelChatGPTSignIn, briefProviderStatus, disconnectChatGPT, generateDailyBrief, cancelDailyBriefGeneration, type BriefProviderStatus } from "./briefs";
+export { gmailStatus, connectGmail, cancelGmailSignIn, disconnectGmail, gmailMessages, cancelGmailCollection, setGmailClientSecret, type GmailStatus, type GmailMessage } from "./gmail";

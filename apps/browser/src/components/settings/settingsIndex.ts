@@ -14,6 +14,7 @@ export const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "search", title: "Search Engine", icon: "magnifyingglass" },
   { id: "shortcuts", title: "Keyboard Shortcuts", icon: "keyboard" },
   { id: "liveFolders", title: "Live Folders", icon: "dot.radiowaves.left.and.right" },
+  { id: "dailyBriefs", title: "Daily Briefs", icon: "sun.max" },
   { id: "calendar", title: "Calendar", icon: "calendar" },
   { id: "advanced", title: "Advanced", icon: "slider.horizontal.3" },
 ];
@@ -338,6 +339,32 @@ const ROWS: Record<SettingsPane, Section[]> = {
           description: "Joining a call makes a tab group for it; links you open from the meeting join the group.",
           keywords: ["zoom", "meet", "call", "tab groups"],
         },
+      },
+    },
+  ],
+  dailyBriefs: [
+    {
+      section: "Daily Briefs",
+      rows: {
+        enabled: { title: "Open a daily brief", description: "Opens a brief tab in the background while Ardia is running. Connect a provider to generate its content.", keywords: ["morning", "daily", "schedule"] },
+        delivery: { title: "Delivery", keywords: ["schedule", "startup", "time"] },
+        time: { title: "Local time", description: "If Ardia is closed, your brief opens the next time you launch it after this time.", keywords: ["morning", "schedule", "timezone"] },
+        open: { title: "Today's brief", description: "Open the page and preview its design.", keywords: ["preview", "daily brief"] },
+      },
+    },
+    {
+      section: "Provider",
+      rows: {
+        provider: { title: "Generate with", keywords: ["chatgpt", "claude", "openai", "anthropic", "subscription", "ai"] },
+        providerAccount: { title: "Provider account", keywords: ["connect", "chatgpt", "claude", "subscription", "api key"] },
+      },
+    },
+    {
+      section: "Connected sources",
+      rows: {
+        gmail: { title: "Gmail", keywords: ["mail", "inbox", "email", "permission"] },
+        calendar: { title: "Calendar", keywords: ["google calendar", "meetings", "events", "permission"] },
+        github: { title: "GitHub", keywords: ["pull requests", "repositories", "permission"] },
       },
     },
   ],

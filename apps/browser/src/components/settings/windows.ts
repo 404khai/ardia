@@ -21,6 +21,7 @@ export type SettingsPane =
   | "shortcuts"
   | "liveFolders"
   | "calendar"
+  | "dailyBriefs"
   | "advanced";
 
 type Nav = {

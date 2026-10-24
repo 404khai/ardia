@@ -442,7 +442,7 @@ Everything in this section is deferred on purpose.
 | Skill Builder, Skills Gallery, share/publish, packs | ✓ | ⏸ | |
 | Artifacts: reports, decks, dashboards; share link / PDF / image / `.diaart` | ✓ | ⏸ | |
 | Reports with inline comments → batched edits | ✓ | ⏸ | |
-| Morning Brief ("Start My Day") | ✓ | ⏸ | |
+| Morning Brief ("Start My Day") | ✓ | 🟡 | Owner-requested Daily Briefs: dated internal pages, rotating supplied artwork, editorial layout, sidebar and top-tab thumbnails, and glass archive with rolling seven-day retention; opt-in local-time or on-open delivery, manual generation, ChatGPT plan OAuth and Claude API-key provider setup. Calendar and GitHub sharing require separate consent; GitHub account authorization uses Ardia’s registered OAuth client with Device Flow enabled, with a personal access token as fallback. Gmail has system-browser Google Desktop OAuth, native Keychain tokens and bounded inbox metadata/snippets with separate provider consent; live Google/provider sign-in, generation and visual parity remain to verify. Other AI surfaces stay deferred. |
 | Meeting prep / recap | ✓ | ⏸ | |
 | Home surface / Task list / missions | ✓ (flagged) | ⏸ | |
 | Tidy Downloads (AI renames files, undo) | ✓ | ⏸ | |
