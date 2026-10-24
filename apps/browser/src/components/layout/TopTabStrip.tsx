@@ -94,7 +94,7 @@ const PROFILE_ROOM = 140;
 const DOWNLOADS_BOX = 34;
 const CONTROLS_GAP = 2;
 
-export function TopTabStrip({ width, floating = false, hidden = false, swipe = true }: { width: number; floating?: boolean; hidden?: boolean; swipe?: boolean }) {
+export function TopTabStrip({ width, floating = false, hidden = false, swipe = true, anchorRevision = 0 }: { width: number; floating?: boolean; hidden?: boolean; swipe?: boolean; anchorRevision?: number }) {
   const windowId = useWindowId();
   const current = useWindowProfileId();
   const { pages } = usePagerPages(windowId);
@@ -122,7 +122,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
         </View>
         <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8, top: MID - 17, flexDirection: "row", alignItems: "center", gap: CONTROLS_GAP }}>
           <ProfileIndicator room={PROFILE_ROOM} />
-          <DownloadsButton windowId={windowId} visible={!hidden && (!floating || swipe)} />
+          <DownloadsButton windowId={windowId} visible={!hidden && (!floating || swipe)} revision={anchorRevision} />
         </View>
         {swipe && <ProfileSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
         {!floating && <StripDropHighlight left={left} right={right} />}
@@ -1533,7 +1533,8 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   const theme = useTheme();
   const windowId = useWindowId();
   const downloadsOpen = useBrowser((s) => !!s.windowUi[windowId]?.downloadsOpen);
-  const { slide, live, show, hide } = usePeek(enabled, false, () => !!useBrowser.getState().windowUi[windowId]?.downloadsOpen);
+  const [anchorRevision, setAnchorRevision] = useState(0);
+  const { slide, live, show, hide } = usePeek(enabled, false, () => !!useBrowser.getState().windowUi[windowId]?.downloadsOpen, undefined, () => setAnchorRevision((n) => n + 1));
   const hadDownloads = useRef(downloadsOpen);
   useEffect(() => {
     if (downloadsOpen) show();
@@ -1588,7 +1589,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
           style={{ flex: 1 }}
         >
           <View style={{ position: "absolute", left: 0, right: 0, top: PEEK_PAD - ITEM_TOP, height: TOP_STRIP_HEIGHT }}>
-            <TopTabStrip floating swipe={live} width={windowWidth - 12 - PEEK_BORDER * 2} />
+            <TopTabStrip floating swipe={live} width={windowWidth - 12 - PEEK_BORDER * 2} anchorRevision={anchorRevision} />
           </View>
         </Surface>
       </Animated.View>

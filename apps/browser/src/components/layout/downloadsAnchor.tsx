@@ -12,7 +12,7 @@ type Anchor = { x: number; y: number; width: number; height: number };
 
 export const useDownloadsAnchors = create<Record<string, Anchor>>()(() => ({}));
 
-export function DownloadsButton({ windowId, visible = true }: { windowId: string; visible?: boolean }) {
+export function DownloadsButton({ windowId, visible = true, revision = 0 }: { windowId: string; visible?: boolean; revision?: number }) {
   const theme = useTheme();
   const view = useRef<View>(null);
   const owned = useRef<Anchor | null>(null);
@@ -48,7 +48,7 @@ export function DownloadsButton({ windowId, visible = true }: { windowId: string
   useEffect(() => {
     if (!visible) { clear(); return; }
     measure();
-  }, [open, width, layout, footer, frame, visible]);
+  }, [open, width, layout, footer, frame, visible, revision]);
   return (
     <View ref={view} collapsable={false} onLayout={() => measure()} mouseDownCanMoveWindow={false}>
       <IconButton
