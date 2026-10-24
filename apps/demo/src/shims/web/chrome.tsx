@@ -93,22 +93,24 @@ export type VisualEffectProps = ViewProps & {
   onDismiss?: () => void;
 };
 
-export function VisualEffect({ liquidGlass: _liquidGlass, material = "popover", blendingMode: _blendingMode, cornerRadius, pointerEdge, pointerX: _pointerX, dark, dismissEnabled = true, onDismiss, style, ...props }: VisualEffectProps) {
+export function VisualEffect({ liquidGlass: _liquidGlass, material = "popover", blendingMode: _blendingMode, cornerRadius, pointerEdge: _pointerEdge, pointerX: _pointerX, dark, dismissEnabled = false, onDismiss, style, ...props }: VisualEffectProps) {
   const host = useRef<HTMLElement | null>(null);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
+  const canDismiss = dismissEnabled && !!onDismiss;
   useEffect(() => {
     const owner = host.current?.ownerDocument;
-    if (!owner || !pointerEdge || !dismissEnabled) return;
+    if (!owner || !canDismiss) return;
     const keydown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      const handler = dismiss.current;
+      if (event.key !== "Escape" || !handler) return;
       event.preventDefault();
       event.stopPropagation();
-      dismiss.current?.();
+      handler();
     };
     owner.addEventListener("keydown", keydown, true);
     return () => owner.removeEventListener("keydown", keydown, true);
-  }, [pointerEdge, dismissEnabled]);
+  }, [canDismiss]);
   const glass: Style = {
     backgroundColor: dark ? "rgba(30,30,30,0.72)" : MATERIAL_FILL[material] ?? "rgba(246,246,246,0.6)",
     backdropFilter: "blur(24px) saturate(180%)",

@@ -15,6 +15,7 @@ test("sidebar header centers the bubble under the button when room allows", () =
   const panel = downloadsGeometry({ width: 1000, height: 800 }, { x: 236, y: 10, height: 34 }, false);
   assert.equal(panel.left + panel.pointerX, 236);
   assert.equal(panel.pointerX, panel.width / 2);
+  assert.equal(panel.width, 288);
   assert.equal(panel.maxHeight, 384);
 });
 
@@ -46,4 +47,7 @@ test("a hidden peek strip anchor cannot place the panel outside the window", () 
   assert.equal(panel.below, true);
   assert.equal(panel.edge, 36);
   assert.ok(panel.left >= 8);
+  assert.ok(panel.left + panel.width <= 792);
+  assert.ok(panel.edge >= 0 && panel.edge <= 600);
+  assert.ok(panel.edge + panel.maxHeight + 10 + 101.5 + 8 <= 600);
 });

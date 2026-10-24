@@ -1542,10 +1542,11 @@ final class VisualEffect: ExpoView {
   var cornerRadius: Double = 0 { didSet { applyCorners() } }
   var pointerEdge: String? { didSet { applyCorners(); updateDismissMonitor() } }
   let onDismiss = EventDispatcher()
-  var dismissEnabled = true { didSet { updateDismissMonitor() } }
+  var dismissEnabled = false { didSet { updateDismissMonitor() } }
   private var dismissMonitor: Any?
   var pointerX: Double = 40 { didSet { applyCorners() } }
   private let bubbleShadow = CAShapeLayer()
+  private let bubbleShadowMask = CAShapeLayer()
   private let bubbleRim = CAGradientLayer()
   private let bubbleStroke = CAShapeLayer()
 
@@ -1577,7 +1578,7 @@ final class VisualEffect: ExpoView {
   private func updateDismissMonitor() {
     if let dismissMonitor { NSEvent.removeMonitor(dismissMonitor) }
     dismissMonitor = nil
-    guard dismissEnabled, window != nil, pointerEdge == "top" || pointerEdge == "bottom" else { return }
+    guard dismissEnabled, window != nil else { return }
     dismissMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let window = self.window, event.window === window, event.keyCode == 53 else { return event }
       self.onDismiss([:])
@@ -1672,6 +1673,14 @@ final class VisualEffect: ExpoView {
     bubbleShadow.shadowOpacity = dark ? 0.42 : 0.22
     bubbleShadow.shadowRadius = 18
     bubbleShadow.shadowOffset = CGSize(width: 0, height: flipped ? 8 : -8)
+    let shadowOutset: CGFloat = 18 * 3 + 8 + 4
+    let shadowCutout = CGMutablePath()
+    shadowCutout.addRect(bounds.insetBy(dx: -shadowOutset, dy: -shadowOutset))
+    shadowCutout.addPath(path)
+    bubbleShadowMask.fillRule = .evenOdd
+    bubbleShadowMask.frame = bounds
+    bubbleShadowMask.path = shadowCutout
+    bubbleShadow.mask = bubbleShadowMask
     bubbleShadow.isHidden = false
     bubbleRim.frame = bounds
     bubbleRim.colors = [NSColor.white.withAlphaComponent(dark ? 0.34 : 0.8).cgColor, NSColor.white.withAlphaComponent(dark ? 0.08 : 0.18).cgColor, NSColor.white.withAlphaComponent(dark ? 0.17 : 0.42).cgColor]

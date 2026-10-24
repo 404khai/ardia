@@ -11,7 +11,7 @@ import { SIDEBAR_FOOTER_DOWNLOADS, useAddressBarInSidebar, useTabLayout } from "
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
 import { PANEL, POPOVER_MOTION, usePopoverPresence } from "./layout/controls";
-import { downloadsGeometry } from "./layout/downloadsGeometry";
+import { DOWNLOADS_LAYOUT, downloadsGeometry } from "./layout/downloadsGeometry";
 import { useDownloadsAnchors } from "./layout/downloadsAnchor";
 import { IconButton, useHover } from "./primitives";
 
@@ -120,11 +120,11 @@ export const FileIcon = memo(function FileIcon({ path, size = 28 }: { path: stri
   );
 });
 
-const HEADER = 38;
-const ROW = 48;
+const HEADER = DOWNLOADS_LAYOUT.header;
+const ROW = DOWNLOADS_LAYOUT.row;
 const FILE_ICON = 22;
 const ROW_BUTTON = 26;
-const POINTER = 10;
+const POINTER = DOWNLOADS_LAYOUT.pointer;
 const RADIUS = 18;
 const TEXT_BUTTON_PAD = 10;
 
@@ -200,7 +200,7 @@ function DownloadsPanel({ windowId, closing, onClosed }: { windowId: string; clo
         }}
       >
         <VisualEffect liquidGlass material="popover" dark={theme.dark} cornerRadius={RADIUS} pointerEdge={below ? "top" : "bottom"} pointerX={pointerX} dismissEnabled={!closing} onDismiss={() => setOpen(false)} style={StyleSheet.absoluteFill} />
-        <View style={{ paddingTop: 8, paddingBottom: 7 }}>
+        <View style={{ paddingTop: DOWNLOADS_LAYOUT.bodyTop, paddingBottom: DOWNLOADS_LAYOUT.bodyBottom }}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: PANEL.inset, paddingRight: PANEL.inset, height: HEADER }}>
             <Text style={{ flex: 1, fontSize: 12.5, fontWeight: "600", letterSpacing: 0.2, color: theme.textSecondary }}>
               RECENT DOWNLOADS
@@ -222,13 +222,13 @@ function DownloadsPanel({ windowId, closing, onClosed }: { windowId: string; clo
               <Text style={{ fontSize: 12, color: theme.textSecondary }}>Your recent files will appear here.</Text>
             </View>
           ) : (
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight }} contentContainerStyle={{ paddingHorizontal: PANEL.rowInset }}>
+            <ScrollView showsVerticalScrollIndicator style={{ maxHeight }} contentContainerStyle={{ paddingHorizontal: PANEL.rowInset }}>
               {ids.map((id) => (
                 <DownloadRowItem key={id} id={id} windowId={windowId} />
               ))}
             </ScrollView>
           )}
-          <View style={{ height: 0.5, marginHorizontal: PANEL.inset, marginTop: 7, marginBottom: 5, backgroundColor: theme.dark ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.12)" }} />
+          <View style={{ height: DOWNLOADS_LAYOUT.separator, marginHorizontal: PANEL.inset, marginTop: DOWNLOADS_LAYOUT.separatorTop, marginBottom: DOWNLOADS_LAYOUT.separatorBottom, backgroundColor: theme.dark ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.12)" }} />
           <FooterButton
             title="View all downloads"
             onPress={() => {
@@ -248,7 +248,7 @@ function TextButton({ title, onPress }: { title: string; onPress: () => void }) 
   return (
     <View {...hoverProps}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress}>
-        <View style={{ height: 25, paddingHorizontal: TEXT_BUTTON_PAD, borderRadius: 12.5, justifyContent: "center", backgroundColor: rowFill(theme.dark, hovered, false) ?? (theme.dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)") }}>
+        <View style={{ height: 25, paddingHorizontal: TEXT_BUTTON_PAD, borderRadius: 12.5, justifyContent: "center", backgroundColor: theme.dark ? `rgba(255,255,255,${hovered ? 0.14 : 0.09})` : `rgba(0,0,0,${hovered ? 0.1 : 0.06})` }}>
           <Text style={{ fontSize: 12, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
         </View>
       </Pressable>
@@ -265,7 +265,7 @@ function FooterButton({ title, onPress }: { title: string; onPress: () => void }
         {({ pressed }) => (
           <View
             style={{
-              height: 36,
+              height: DOWNLOADS_LAYOUT.footer,
               paddingHorizontal: PANEL.rowPadding,
               borderRadius: PANEL.rowRadius,
               flexDirection: "row",

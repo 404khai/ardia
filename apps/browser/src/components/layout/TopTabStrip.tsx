@@ -1536,9 +1536,10 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   const { slide, live, show, hide } = usePeek(enabled, false, () => !!useBrowser.getState().windowUi[windowId]?.downloadsOpen);
   const hadDownloads = useRef(downloadsOpen);
   useEffect(() => {
-    if (hadDownloads.current && !downloadsOpen) hide();
+    if (downloadsOpen) show();
+    else if (hadDownloads.current) hide();
     hadDownloads.current = downloadsOpen;
-  }, [downloadsOpen]);
+  }, [downloadsOpen, enabled]);
   useEffect(() => {
     if (!enabled) return;
     void setTrafficLightsCenter(windowId, lightsCenter(layout.sidebarWidth));
