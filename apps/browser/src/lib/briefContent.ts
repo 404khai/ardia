@@ -74,16 +74,20 @@ export function focusDisplayLinks(focus: BriefContent["focus"]): BriefLink[] {
   const exactUrls = new Set(description.match(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*/g) ?? []);
   const numbers = new Set([...description.matchAll(/(?:#|\bPR\s*#?|\bpull request\s*#?)([1-9]\d*)\b/gi)].map((match) => match[1]));
   const github = links.filter((link) => briefSource(link.url)?.kind === "github");
-  if (!numbers.size && !exactUrls.size) return /\bPRs?\b|\bpull requests?\b/i.test(description) ? github : links;
-  const repos = new Set((description.match(/\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g) ?? []).map((repo) => repo.toLowerCase()));
+  if (!numbers.size && !exactUrls.size) {
+    if (!/\bPRs?\b|\bpull requests?\b/i.test(description)) return links;
+    const titled = github.filter((link) => sourceTitleMatches(focus, link.title));
+    return titled.length === 1 ? titled : [];
+  }
+  const plainText = description.replace(/https:\/\/\S+/g, "");
+  const repos = new Set((plainText.match(/\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g) ?? []).map((repo) => repo.toLowerCase()));
   return github.filter((link) => {
     if (exactUrls.has(link.url)) return true;
     const parts = link.url.split("/");
     const number = parts.at(-1)!;
     if (!numbers.has(number)) return false;
-    const sameNumber = github.filter((candidate) => candidate.url.split("/").at(-1) === number);
-    if (sameNumber.length === 1) return true;
-    return repos.has(`${parts[3]}/${parts[4]}`.toLowerCase());
+    if (repos.size) return repos.has(`${parts[3]}/${parts[4]}`.toLowerCase());
+    return github.filter((candidate) => candidate.url.split("/").at(-1) === number).length === 1;
   });
 }
 

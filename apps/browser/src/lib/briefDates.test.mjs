@@ -111,7 +111,7 @@ test("focus popup only lists PRs explicitly mentioned in its visible text", () =
   assert.deepEqual(focusDisplayLinks(focus), [first]);
   assert.deepEqual(focusDisplayLinks({ ...focus, body: "Read #193 too." }), [first, second]);
   assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare pull request192" }), [first]);
-  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare the PRs" }), [first, second]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare the PRs" }), []);
   assert.deepEqual(focusDisplayLinks({ ...focus, title: "Read this email", links: [email] }), [email]);
   const parsed = parseBriefContent(JSON.stringify({ summary: "Summary", focus, todos: [], updates: [], events: [] }));
   assert.deepEqual(focusDisplayLinks(parsed.focus), [first]);
@@ -125,4 +125,15 @@ test("focus popup excludes ambiguous PR numbers unless the repository is explici
   assert.deepEqual(focusDisplayLinks({ ...focus, body: "In owner/repo." }), [first]);
   assert.deepEqual(focusDisplayLinks({ ...focus, body: first.url }), [first]);
   assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare PR #1920" }), []);
+});
+
+
+test("focus popup respects an explicit repository even when only the wrong PR is cited", () => {
+  const first = { title: "Fix sidebar clipping during live resize", url: "https://github.com/owner/repo/pull/192" };
+  const second = { title: "Repair calendar permission handling", url: "https://github.com/other/repo/pull/193" };
+  assert.deepEqual(focusDisplayLinks({ title: "Prepare other/repo PR #192", body: "Read the review.", links: [first] }), []);
+  assert.deepEqual(focusDisplayLinks({ title: "Prepare owner/repo PR #192", body: "Read the review.", links: [first] }), [first]);
+  assert.deepEqual(focusDisplayLinks({ title: "Prepare the PRs", body: "Read the review.", links: [first, second] }), []);
+  assert.deepEqual(focusDisplayLinks({ title: "Prepare the PRs", body: "Check Fix sidebar clipping during live resize.", links: [first, second] }), [first]);
+  assert.deepEqual(focusDisplayLinks({ title: "Prepare the PRs", body: "Check Fix sidebar clipping during live resize and Repair calendar permission handling.", links: [first, second] }), []);
 });
