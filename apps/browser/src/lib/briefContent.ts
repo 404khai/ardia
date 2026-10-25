@@ -1,7 +1,7 @@
 export type BriefSource = { kind: "github" | "gmail"; url: string; project?: string };
 export type BriefItem = { title: string; body: string; source?: BriefSource };
 export type BriefLink = { title: string; url: string; kind?: "github" | "gmail" };
-export type BriefContent = { summary: string; focus: BriefItem & { links?: BriefLink[] }; todos: BriefItem[]; updates: BriefItem[]; events: (BriefItem & { time: string })[] };
+export type BriefContent = { summary: string; focus: BriefItem & { links?: BriefLink[] }; todos: BriefItem[]; updates: BriefItem[]; events: (BriefItem & { time: string; start?: string; end?: string; allDay?: boolean })[] };
 
 function briefSource(value: unknown): BriefSource | undefined {
   const source = typeof value === "string" ? { url: value } : value && typeof value === "object" ? value as Record<string, unknown> : null;
@@ -53,7 +53,7 @@ export function parseBriefContent(raw: string): BriefContent {
       return [{ url: bound.url, title: typeof value.title === "string" ? value.title.slice(0, 240) : bound.url, ...(bound.kind === "gmail" ? { kind: bound.kind } : {}) }];
     });
   }
-  return { summary: text(content.summary, 600), focus, todos: items(content.todos), updates: items(content.updates), events: content.events.slice(0, 20).map((event: Record<string, unknown>) => ({ ...item(event), time: text(event.time, 80) })) };
+  return { summary: text(content.summary, 600), focus, todos: items(content.todos), updates: items(content.updates), events: content.events.slice(0, 20).map((event: Record<string, unknown>) => ({ ...item(event), time: text(event.time, 80), ...(typeof event.start === "string" ? { start: text(event.start, 80) } : {}), ...(typeof event.end === "string" ? { end: text(event.end, 80) } : {}), ...(typeof event.allDay === "boolean" ? { allDay: event.allDay } : {}) })) };
 }
 
 function sourceTitleMatches(item: BriefItem, title: string): boolean {
@@ -62,7 +62,7 @@ function sourceTitleMatches(item: BriefItem, title: string): boolean {
   const normalized = normalize(title);
   const ignored = new Set(["the", "and", "for", "with", "from", "your", "this", "that", "into", "pull", "request", "update", "review", "gmail", "message", "email", "notification"]);
   const tokens = [...new Set(normalized.split(" ").filter((token) => token.length >= 3 && !ignored.has(token)))];
-  if (normalized.length >= 12 && tokens.length >= 2 && description.includes(normalized)) return true;
+  if (normalized.length >= 12 && tokens.length >= 2 && ` ${description} `.includes(` ${normalized} `)) return true;
   const words = new Set(description.split(" "));
   const matches = tokens.filter((token) => words.has(token)).length;
   return tokens.length >= 3 && matches >= 3 && matches / tokens.length >= 0.8;
@@ -142,4 +142,42 @@ export function briefSummary(value: string): string {
   if (sentences.length <= 160) return sentences;
   const boundary = sentences.slice(0, 160).lastIndexOf(" ");
   return `${sentences.slice(0, boundary > 100 ? boundary : 159).replace(/[,:;—–-]+$/, "").trimEnd()}…`;
+}
+
+
+export function briefEventTime(event: BriefContent["events"][number], timeZone?: string): { start: string; range: string; body: string } {
+  if (event.allDay || /^all[ -]day$/i.test(event.time.trim())) return { start: "All day", range: "All day", body: event.body };
+  let start = event.start ? new Date(event.start) : null;
+  let end = event.end ? new Date(event.end) : null;
+  if (!start || !Number.isFinite(start.getTime())) {
+    const raw = event.time.trim();
+    const dated = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?\s*(?:[–—-]\s*(\d{2}:\d{2}))?\s*(UTC|GMT)?$/i);
+    if (dated) {
+      const zone = dated[3] || (dated[5] ? "Z" : "");
+      start = new Date(`${dated[1]}T${dated[2]}:00${zone}`);
+      if (dated[4]) end = new Date(`${dated[1]}T${dated[4]}:00${zone}`);
+    } else {
+      const times = [...raw.matchAll(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/gi)];
+      const local = (match: RegExpMatchArray | undefined) => {
+        if (!match) return null;
+        let hour = Number(match[1]);
+        const minute = Number(match[2]);
+        if (minute > 59 || hour > (match[3] ? 12 : 23)) return null;
+        if (match[3]) hour = hour % 12 + (match[3].toLowerCase() === "pm" ? 12 : 0);
+        const date = new Date();
+        date.setHours(hour, minute, 0, 0);
+        return date;
+      };
+      start = local(times[0]);
+      end = local(times[1]);
+    }
+  }
+  if (!start || !Number.isFinite(start.getTime())) return { start: "TBD", range: "Time to be confirmed", body: event.body };
+  const format = (date: Date) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, ...(timeZone ? { timeZone } : {}) }).format(date).replace(/\s+/g, " ");
+  const startLabel = format(start);
+  const validEnd = end && Number.isFinite(end.getTime()) ? end : null;
+  const minutes = validEnd ? Math.round((validEnd.getTime() - start.getTime()) / 60_000) : 0;
+  const duration = minutes > 0 ? minutes % 60 === 0 ? `${minutes / 60}-hour calendar event.` : `${minutes}-minute calendar event.` : "Calendar event.";
+  const body = /\bUTC\b|\bGMT\b|\btime ?zone\b|\d{4}-\d{2}-\d{2}/i.test(event.body) ? duration : event.body;
+  return { start: startLabel.replace(/\s/g, "").toLowerCase(), range: validEnd ? `${startLabel} – ${format(validEnd)}` : startLabel, body };
 }

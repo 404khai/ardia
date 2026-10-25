@@ -20,3 +20,7 @@ export function briefDue(settings: { dailyBriefEnabled: boolean; dailyBriefTime:
   const [hour, minute] = settings.dailyBriefTime.split(":").map(Number);
   return now.getHours() * 60 + now.getMinutes() >= hour! * 60 + minute!;
 }
+
+export function briefRetryDue(attempt: { count: number; lastAttempt: number } | undefined, now: number): boolean {
+  return !attempt || attempt.count < 3 && now - attempt.lastAttempt >= 5 * 60_000;
+}

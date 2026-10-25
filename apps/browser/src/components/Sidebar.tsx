@@ -7,7 +7,7 @@ import { everySlowly } from "../lib/slowTimers";
 import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { PageProfileContext, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
-import { activeTabId } from "../store/model";
+import { activeTabId, isIncognitoProfile } from "../store/model";
 import { downloadsIn } from "../store/ui";
 import { ancestorIds } from "../store/groups";
 import { cleanedTabsFor, cleanUpCandidates, groupOf } from "../store/organize";
@@ -77,7 +77,9 @@ export function Sidebar({ width }: { width: number }) {
   const hasDownloads = useBrowser((s) => downloadsIn(s, windowId).length > 0);
   const dots = useProfileDotsShown();
   const footerDownloads = addressBar && hasDownloads;
-  const footer = PROFILE_DOTS_HEIGHT;
+  const profileCount = useBrowser((s) => s.profileOrder.length);
+  const raisedDots = dots && profileCount * 12 > width - 100;
+  const footer = PROFILE_DOTS_HEIGHT * (raisedDots ? 2 : 1);
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   const sidebarHover = useSidebarHoverProps(windowId);
@@ -135,10 +137,10 @@ export function Sidebar({ width }: { width: number }) {
 
           {footer ? (
             <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
-              {dots ? <ProfileDots windowId={windowId} /> : null}
+              {dots ? <View style={{ position: "absolute", left: raisedDots ? 0 : 50, right: raisedDots ? 0 : 50, bottom: raisedDots ? PROFILE_DOTS_HEIGHT : 0 }}><ProfileDots windowId={windowId} /></View> : null}
               <BriefArchiveButton windowId={windowId} />
               {footerDownloads ? (
-                <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
+                <View style={{ position: "absolute", right: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
                   <DownloadsButton windowId={windowId} />
                 </View>
               ) : null}
@@ -180,6 +182,11 @@ export function Sidebar({ width }: { width: number }) {
 function BriefArchiveButton({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const open = useSidebarUi((s) => s.briefArchive === windowId);
+  const available = useBrowser((s) => {
+    const window = s.windows[windowId];
+    return !!window && !window.incognito && window.kind !== "small" && !isIncognitoProfile(window.profileId);
+  });
+  if (!available) return null;
   return <Pressable accessibilityRole="button" accessibilityLabel="Daily brief archive" tooltip="Daily Briefs" onPress={() => setSidebarUi({ briefArchive: open ? null : windowId })} style={{ position: "absolute", left: 13, bottom: 5, width: 31, height: 31, alignItems: "center", justifyContent: "center", borderRadius: 7, backgroundColor: open ? theme.tabHover : "transparent" }}><Symbol name="doc.text" size={19} color={theme.textSecondary} /></Pressable>;
 }
 

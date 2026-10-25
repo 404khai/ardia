@@ -114,9 +114,7 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
                   shadowOffset={[0, 0.5]}
                   style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
-                  {isBrief ? (
-                    <Symbol name="doc" size={17} color={active ? theme.tabSelectedText : theme.icon} style={{ width: 16, height: 20 }} />
-                  ) : resettable ? (
+                  {resettable ? (
                     <View {...backToPin.hoverProps}>
                       <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tab.id)} tooltip="Back to Pinned URL (⌘↩)">
                         {resetting ? (
@@ -131,6 +129,8 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
                         )}
                       </Pressable>
                     </View>
+                  ) : isBrief ? (
+                    <Symbol name="doc" size={17} color={active ? theme.tabSelectedText : theme.icon} style={{ width: 16, height: 20 }} />
                   ) : (
                     <View>
                       <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />

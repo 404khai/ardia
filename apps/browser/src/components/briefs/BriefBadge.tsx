@@ -3,16 +3,18 @@ import { Symbol } from "@ardia/shell";
 import { Animated, Image, Linking, Pressable, Text, View } from "react-native";
 import { isSafeBriefSource, type BriefLink } from "../../lib/briefContent";
 
-type Props = { title: string; onPress?: () => void; small?: boolean; links?: BriefLink[]; maxWidth?: number };
+type Props = { title: string; onPress?: () => void; small?: boolean; links?: BriefLink[]; maxWidth?: number; popupBounds?: { left: number; right: number } };
 
 const rotations = [0, 22.5, 45, 67.5];
 const linkKind = (link: BriefLink) => link.kind ?? (link.url.startsWith("https://github.com/") ? "github" : "gmail");
 const validLink = (link: BriefLink) => isSafeBriefSource({ kind: linkKind(link), url: link.url });
 
-export function BriefBadge({ title, onPress, small = false, links = [], maxWidth = 330 }: Props) {
+export function BriefBadge({ title, onPress, small = false, links = [], maxWidth = 330, popupBounds }: Props) {
   const size = small ? 84 : 108;
   const face = size * 0.76;
-  const popupWidth = Math.max(160, Math.min(330, maxWidth));
+  const popupWidth = Math.min(330, maxWidth, popupBounds ? popupBounds.right - popupBounds.left : Infinity);
+  const centeredPopupLeft = (size - popupWidth) / 2;
+  const popupLeft = popupBounds ? Math.max(popupBounds.left, Math.min(centeredPopupLeft, popupBounds.right - popupWidth)) : centeredPopupLeft;
   const hasArrow = /→\s*$/.test(title);
   const labelLines = title.replace(/\s*→\s*$/, "").split("\n");
   const finalLine = labelLines.pop() ?? "";
@@ -66,7 +68,7 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
           </View>
         </Animated.View>
       </Pressable>
-      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: (size - popupWidth) / 2, width: popupWidth, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
+      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: popupLeft, width: popupWidth, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
         <Text style={{ color: "#eeeeeb", fontFamily: "Georgia", fontSize: 16 }}>Sources for this recommendation</Text>
         <Text style={{ color: "#bbb7b0", fontSize: 13, lineHeight: 19 }}>{references.length ? "Open the sources behind this recommendation." : "Refresh this brief to load its source links."}</Text>
         {references.map((link) => {

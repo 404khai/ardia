@@ -1,18 +1,20 @@
 import { registerBriefHover } from "./devDriver";
-import { useEffect, useRef, useState } from "react";
+import { useWindowId } from "../../store/hooks";
+import { useEffect, useId, useRef, useState } from "react";
 import { Animated, Easing, Image, View } from "react-native";
 
 type Service = "github" | "gmail" | "calendar";
 export function BriefFooterIcon({ service }: { service: Service }) {
   const view = useRef<View>(null);
+  const windowId = useWindowId();
+  const instanceId = useId();
   const [hovered, setHovered] = useState(false);
   const motion = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!__DEV__) return;
-    const key = "footer:" + service;
-    registerBriefHover(key, { hovered, measure: () => new Promise((resolve) => { if (view.current) view.current.measureInWindow((x, y, width, height) => resolve([x, y, width, height])); else resolve([]); }) });
-    return () => registerBriefHover(key, null);
-  }, [hovered, service]);
+    const key = `${windowId}:${instanceId}:footer:${service}`;
+    return registerBriefHover(key, { hovered, measure: () => new Promise((resolve) => { if (view.current) view.current.measureInWindow((x, y, width, height) => resolve([x, y, width, height])); else resolve([]); }) });
+  }, [hovered, service, windowId, instanceId]);
   useEffect(() => {
     motion.stopAnimation();
     if (service === "calendar") {

@@ -2,6 +2,7 @@ import { briefProviderStatus, cancelChatGPTSignIn, cancelGmailCollection, cancel
 import { useEffect, useRef, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { focus } from "../../../lib/actions";
+import { localBriefDate } from "../../../lib/briefDates";
 import { openDailyBrief } from "../../../lib/dailyBriefs";
 import { useTheme } from "../../../lib/theme";
 import { connectCalendar, useCalendar } from "../../../live/calendar";
@@ -22,11 +23,6 @@ const SOURCE_DETAILS: Record<Source, string> = {
   github: "Connect through GitHub's account permission screen. The current sign-in requests repo and read:org access; review the permissions before approving. Connecting GitHub and allowing its data in a brief are separate choices.",
 };
 
-const today = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-};
-
 function browserWindow() {
   const state = useBrowser.getState();
   return state.ui.focusOrder.find((id) => state.windows[id] && !state.windows[id]!.incognito && state.windows[id]!.kind !== "small")
@@ -42,7 +38,7 @@ function openAuthorization(url: string) {
 
 function openToday() {
   const id = browserWindow();
-  openDailyBrief(id, today());
+  openDailyBrief(id, localBriefDate());
   focus(id);
 }
 
@@ -95,7 +91,7 @@ export function DailyBriefsPane() {
         <Row anchor="dailyBriefs.delivery">
           <PopUp value={settings.dailyBriefDelivery} options={[{ value: "scheduled", title: "At a Set Time" }, { value: "onOpen", title: "When I Open Ardia" }]} onChange={(dailyBriefDelivery) => update({ dailyBriefDelivery })} minWidth={174} />
         </Row>
-        {settings.dailyBriefDelivery === "scheduled" ? <Row anchor="dailyBriefs.time"><BriefTime value={settings.dailyBriefTime} onChange={(dailyBriefTime) => update({ dailyBriefTime })} /></Row> : null}
+        <Row anchor="dailyBriefs.time"><BriefTime disabled={settings.dailyBriefDelivery !== "scheduled"} value={settings.dailyBriefTime} onChange={(dailyBriefTime) => update({ dailyBriefTime })} /></Row>
         <Row anchor="dailyBriefs.open"><Button title="Open Brief" onPress={openToday} /></Row>
       </Group>
       <SectionHeader title="Provider" description="Your selected provider receives only the sources you explicitly allow below. Connecting an account and sharing its data are separate permissions." />
@@ -117,12 +113,13 @@ export function DailyBriefsPane() {
   );
 }
 
-function BriefTime({ value, onChange }: { value: string; onChange(value: string): void }) {
+function BriefTime({ value, onChange, disabled }: { value: string; onChange(value: string): void; disabled?: boolean }) {
   const theme = useTheme();
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
   useEffect(() => setDraft(value), [value]);
   const save = () => {
+    if (disabled) return;
     const match = /^(\d{1,2}):(\d{2})$/.exec(draft.trim());
     if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return setInvalid(true);
     onChange(`${match[1]!.padStart(2, "0")}:${match[2]}`);
@@ -130,7 +127,7 @@ function BriefTime({ value, onChange }: { value: string; onChange(value: string)
   };
   return (
     <View style={{ width: 100, gap: 4 }}>
-      <TextField value={draft} onChangeText={(v) => { setDraft(v); setInvalid(false); }} onSubmit={save} onBlur={save} placeholder="08:00" />
+      <TextField disabled={disabled} value={draft} onChangeText={(v) => { setDraft(v); setInvalid(false); }} onSubmit={save} onBlur={save} placeholder="08:00" />
       {invalid ? <Text style={{ fontSize: 10, color: theme.textSecondary }}>Use 00:00–23:59</Text> : null}
     </View>
   );

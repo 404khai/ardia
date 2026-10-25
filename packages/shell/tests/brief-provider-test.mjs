@@ -43,8 +43,10 @@ try {
   const binary = join(scratch, "provider-tests");
   await writeFile(swift, imports + provider + fixture);
   await run("xcrun", ["swiftc", "-parse-as-library", "-swift-version", "5", swift, "-o", binary]);
-  await run(binary, [], { ARDIA_BRIEF_TEST_DATA: join(scratch, "data"), ARDIA_BRIEF_TEST_REQUESTS: requestsPath, ARDIA_BRIEF_TEST_RESOURCE: `http://127.0.0.1:${server.address().port}/v1` });
-  assert.deepEqual(requests, ["/v1/models"]);
+  const reviewCases = process.env.ARDIA_BRIEF_REVIEW_CASE === "baseline" ? [] : process.env.ARDIA_BRIEF_REVIEW_CASE ? [process.env.ARDIA_BRIEF_REVIEW_CASE] : ["isolated-storage", "isolated-migration", "disconnect-account", "reauthorization-hint", "callback-terminal", "callback-prestart-cancel"];
+  for (const reviewCase of reviewCases) await run(binary, [], { ARDIA_BRIEF_REVIEW_CASE: reviewCase, ARDIA_BRIEF_TEST_DATA: join(scratch, reviewCase), ARDIA_BRIEF_TEST_RESOURCE: `http://127.0.0.1:${server.address().port}/v1` });
+  if (!process.env.ARDIA_BRIEF_REVIEW_CASE || process.env.ARDIA_BRIEF_REVIEW_CASE === "baseline") await run(binary, [], { ARDIA_BRIEF_TEST_DATA: join(scratch, "data"), ARDIA_BRIEF_TEST_REQUESTS: requestsPath, ARDIA_BRIEF_TEST_RESOURCE: `http://127.0.0.1:${server.address().port}/v1` });
+  assert.deepEqual(requests, process.env.ARDIA_BRIEF_REVIEW_CASE && process.env.ARDIA_BRIEF_REVIEW_CASE !== "baseline" ? [] : ["/v1/models"]);
 } finally {
   await new Promise((resolve) => server.close(resolve));
   await rm(scratch, { recursive: true, force: true });

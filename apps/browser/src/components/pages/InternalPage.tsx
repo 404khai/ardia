@@ -6,7 +6,7 @@ import { setPageProgress } from "../../store/pageProgress";
 import { generateBrief, loadDailyBrief, useDailyBriefs } from "../../lib/dailyBriefs";
 import { DailyBriefPage } from "../briefs/DailyBriefPage";
 import { briefTitleForDate } from "../briefs/assets";
-import { briefDateFromUrl } from "../../lib/briefDates";
+import { briefDateFromUrl, localBriefDate } from "../../lib/briefDates";
 import { openSettings } from "../settings/windows";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
@@ -40,7 +40,7 @@ export function InternalPage({ tabId }: { tabId: string }) {
   if (!page) return null;
   return (
     <View style={StyleSheet.absoluteFill}>
-      {page === "brief" && <DailyBriefPage key={url} date={date} content={brief?.content} loading={brief?.loading} error={brief?.error} onGenerate={() => void generateBrief(profileId, date)} onConfigure={() => openSettings("dailyBriefs")} />}
+      {page === "brief" && <DailyBriefPage key={url} date={date} content={brief?.content} loading={brief?.loading} error={brief?.error} onGenerate={date === localBriefDate() ? () => void generateBrief(profileId, date) : undefined} onConfigure={() => openSettings("dailyBriefs")} />}
       {page === "history" && <HistoryPage tabId={tabId} profileId={profileId} initialQuery={internalQuery(url)} />}
       {page === "bookmarks" && <BookmarksPage key={bookmarkProfile} tabId={tabId} profileId={bookmarkProfile} />}
       {page === "downloads" && <DownloadsPage tabId={tabId} />}

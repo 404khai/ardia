@@ -30,9 +30,9 @@ export async function connectChatGPT(openAuthorization: (url: string) => void | 
   }
 }
 
-export const cancelChatGPTSignIn = () => native().cancelChatGPTSignIn();
-export const briefProviderStatus = () => native().briefProviderStatus();
-export const disconnectChatGPT = () => native().disconnectChatGPT();
-export const generateDailyBrief = (contextJSON: string) => native().generateDailyBrief(contextJSON);
+export const cancelChatGPTSignIn = async () => native().cancelChatGPTSignIn();
+export const briefProviderStatus = async () => native().briefProviderStatus();
+export const disconnectChatGPT = async () => native().disconnectChatGPT();
+export const generateDailyBrief = async (contextJSON: string) => native().generateDailyBrief(contextJSON);
 
-export const cancelDailyBriefGeneration = () => native().cancelDailyBriefGeneration();
+export const cancelDailyBriefGeneration = async () => native().cancelDailyBriefGeneration();

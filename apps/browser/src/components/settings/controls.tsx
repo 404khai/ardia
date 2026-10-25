@@ -300,6 +300,7 @@ export function TextField({
   onEscape,
   onBlur,
   selectOnFocus,
+  disabled = false,
   style,
 }: {
   value: string;
@@ -311,6 +312,7 @@ export function TextField({
   onEscape?: () => void;
   onBlur?: () => void;
   selectOnFocus?: boolean;
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
@@ -327,11 +329,14 @@ export function TextField({
           borderWidth: StyleSheet.hairlineWidth * 2,
           borderColor: colors.fieldBorder,
         },
+        { opacity: disabled ? 0.45 : 1 },
         style,
       ]}
     >
       <TextInput
         value={value}
+        editable={!disabled}
+        accessibilityState={{ disabled }}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={theme.textTertiary}

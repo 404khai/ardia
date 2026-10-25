@@ -14,9 +14,11 @@ export function scrollBrief(windowId: string, y: number) {
 
 type HoverProbe = { hovered: boolean; measure: () => Promise<number[]> };
 const hoverProbes = new Map<string, HoverProbe>();
-export function registerBriefHover(key: string, probe: HoverProbe | null) {
-  if (probe) hoverProbes.set(key, probe);
-  else hoverProbes.delete(key);
+export function registerBriefHover(key: string, probe: HoverProbe) {
+  hoverProbes.set(key, probe);
+  return () => {
+    if (hoverProbes.get(key) === probe) hoverProbes.delete(key);
+  };
 }
 export async function briefHoverSnapshot() {
   return Promise.all([...hoverProbes].map(async ([key, probe]) => ({ key, hovered: probe.hovered, frame: await probe.measure() })));

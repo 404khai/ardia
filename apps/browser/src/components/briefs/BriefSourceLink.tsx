@@ -1,18 +1,20 @@
 import { registerBriefHover } from "./devDriver";
-import { useEffect, useRef, useState } from "react";
+import { useWindowId } from "../../store/hooks";
+import { useEffect, useId, useRef, useState } from "react";
 import { Animated, Image, Linking, Pressable, Text, View } from "react-native";
 import { isSafeBriefSource, type BriefSource } from "../../lib/briefContent";
 
 export function BriefSourceLink({ source }: { source: BriefSource }) {
   const view = useRef<View>(null);
+  const windowId = useWindowId();
+  const instanceId = useId();
   const [hovered, setHovered] = useState(false);
   const tilt = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!__DEV__) return;
-    const key = source.url;
-    registerBriefHover(key, { hovered, measure: () => new Promise((resolve) => { if (view.current) view.current.measureInWindow((x, y, width, height) => resolve([x, y, width, height])); else resolve([]); }) });
-    return () => registerBriefHover(key, null);
-  }, [hovered, source.url]);
+    const key = `${windowId}:${instanceId}:${source.url}`;
+    return registerBriefHover(key, { hovered, measure: () => new Promise((resolve) => { if (view.current) view.current.measureInWindow((x, y, width, height) => resolve([x, y, width, height])); else resolve([]); }) });
+  }, [hovered, source.url, windowId, instanceId]);
   useEffect(() => {
     Animated.timing(tilt, { toValue: hovered ? 1 : 0, duration: 180, useNativeDriver: true }).start();
     return () => tilt.stopAnimation();

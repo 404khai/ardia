@@ -19,6 +19,11 @@ const run = (command, args) => new Promise((resolve, reject) => {
 try {
   const source = await readFile(new URL("../ios/GmailModule.swift", import.meta.url), "utf8");
   const fixture = await readFile(new URL("./gmail-provider-tests.swift", import.meta.url), "utf8");
+  const briefSource = await readFile(new URL("../ios/BriefsModule.swift", import.meta.url), "utf8");
+  const callbackStart = briefSource.indexOf("struct OAuthLoopbackError:");
+  const callbackEnd = briefSource.indexOf("private struct BriefSignIn {");
+  assert(callbackStart >= 0 && callbackEnd > callbackStart);
+  const callback = briefSource.slice(callbackStart, callbackEnd);
   const marker = "private struct GmailError:";
   assert(source.includes(marker));
   let provider = source.slice(source.indexOf(marker));
@@ -34,7 +39,7 @@ try {
   const imports = 'import Foundation\nimport AppKit\nimport Network\nimport Security\nimport CryptoKit\nimport LocalAuthentication\nfunc ACIsolatedDataDirectory() -> String? { "/tmp/ardia-gmail-test-no-credentials" }\n';
   const swift = join(scratch, "GmailTests.swift");
   const binary = join(scratch, "gmail-tests");
-  await writeFile(swift, imports + provider + fixture);
+  await writeFile(swift, imports + callback + provider + fixture);
   await run("xcrun", ["swiftc", "-parse-as-library", "-swift-version", "5", swift, "-o", binary]);
   await run(binary, []);
 } finally {

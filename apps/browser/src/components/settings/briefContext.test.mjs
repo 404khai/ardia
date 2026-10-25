@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { useBrowser } from "../../store/browser.ts";
-import { gmailTest } from "@ardia/shell";
+import { gmailTest, keychainTest } from "@ardia/shell";
 import { collectBriefContext, connectClaudeKey, disconnectClaude, generateClaudeBrief } from "./briefContext.ts";
 
 const noSources = { gmail: false, calendar: false, github: false };
@@ -149,14 +149,122 @@ test("an aborted generation does not read a key or submit context", async () => 
 
 test("disconnect cancels generation waiting for its Keychain read before it can submit context", async () => {
   const fetchBefore = globalThis.fetch;
+  const getBefore = keychainTest.get;
   let requested = false;
+  let release;
+  keychainTest.get = () => new Promise((resolve) => { release = resolve; });
   globalThis.fetch = () => { requested = true; throw new Error("Unexpected service request"); };
   try {
     const rejected = assert.rejects(generateClaudeBrief("private context"), /cancelled/);
+    assert.equal(typeof release, "function");
     await disconnectClaude();
+    assert.equal(requested, false);
+    release("sk-ant-test");
     await rejected;
     assert.equal(requested, false);
   } finally {
     globalThis.fetch = fetchBefore;
+    keychainTest.get = getBefore;
+  }
+});
+
+test("Claude preserves request cancellation and response size-limit errors", async () => {
+  const fetchBefore = globalThis.fetch;
+  const getBefore = keychainTest.get;
+  keychainTest.get = async () => "sk-ant-test";
+  let began;
+  const reading = new Promise((resolve) => { began = resolve; });
+  globalThis.fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+    began();
+  });
+  try {
+    const controller = new AbortController();
+    const rejected = assert.rejects(generateClaudeBrief("context", controller.signal), /cancelled/);
+    await reading;
+    controller.abort();
+    await rejected;
+    globalThis.fetch = async () => ({ ok: true, status: 200, text: async () => "x".repeat(256_001) });
+    await assert.rejects(generateClaudeBrief("context"), /too much data/);
+  } finally {
+    globalThis.fetch = fetchBefore;
+    keychainTest.get = getBefore;
+  }
+});
+
+test("concurrent briefs share one Gmail collection without cancelling each other", async () => {
+  const settings = useBrowser.getState().settings;
+  const status = gmailTest.status;
+  const messages = gmailTest.messages;
+  const cancel = gmailTest.cancel;
+  let release;
+  let began;
+  const reading = new Promise((resolve) => { began = resolve; });
+  let reads = 0;
+  let cancellations = 0;
+  gmailTest.status = async () => ({ connected: true, email: "test@example.com", clientSecretConfigured: false });
+  gmailTest.messages = () => { reads++; began(); return new Promise((resolve) => { release = resolve; }); };
+  gmailTest.cancel = async () => { cancellations++; };
+  useBrowser.getState().updateSettings({ dailyBriefSources: { ...noSources, gmail: true } });
+  try {
+    const first = collectBriefContext();
+    const second = collectBriefContext();
+    await reading;
+    assert.equal(reads, 1);
+    release([{ id: "abc123", subject: "Subject", from: "Sender", date: "today", snippet: "Message" }]);
+    const results = await Promise.all([first, second]);
+    assert.equal(results[0].gmail.length, 1);
+    assert.deepEqual(results[0].gmail, results[1].gmail);
+    assert.equal(cancellations, 0);
+  } finally {
+    gmailTest.status = status;
+    gmailTest.messages = messages;
+    gmailTest.cancel = cancel;
+    useBrowser.setState({ settings });
+  }
+});
+
+
+test("a changed provider waits for old Gmail cancellation before starting its own collection", async () => {
+  const settings = useBrowser.getState().settings;
+  const status = gmailTest.status;
+  const messages = gmailTest.messages;
+  const cancel = gmailTest.cancel;
+  let releaseFirst;
+  let releaseSecond;
+  let releaseCancellation;
+  let beganFirst;
+  let beganSecond;
+  const firstReading = new Promise((resolve) => { beganFirst = resolve; });
+  const secondReading = new Promise((resolve) => { beganSecond = resolve; });
+  let reads = 0;
+  gmailTest.status = async () => ({ connected: true, email: "test@example.com", clientSecretConfigured: false });
+  gmailTest.messages = () => {
+    reads++;
+    if (reads === 1) { beganFirst(); return new Promise((resolve) => { releaseFirst = resolve; }); }
+    beganSecond();
+    return new Promise((resolve) => { releaseSecond = resolve; });
+  };
+  gmailTest.cancel = () => new Promise((resolve) => { releaseCancellation = resolve; });
+  useBrowser.getState().updateSettings({ dailyBriefProvider: "chatgpt", dailyBriefSources: { ...noSources, gmail: true } });
+  try {
+    const rejected = assert.rejects(collectBriefContext(), /permissions changed/);
+    await firstReading;
+    useBrowser.getState().updateSettings({ dailyBriefProvider: "claude" });
+    const second = collectBriefContext();
+    releaseFirst([]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reads, 1);
+    releaseCancellation();
+    await rejected;
+    await secondReading;
+    releaseSecond([{ id: "abc123", subject: "Subject", from: "Sender", date: "today", snippet: "Message" }]);
+    assert.equal((await second).gmail.length, 1);
+    assert.equal(reads, 2);
+  } finally {
+    gmailTest.status = status;
+    gmailTest.messages = messages;
+    gmailTest.cancel = cancel;
+    useBrowser.setState({ settings });
   }
 });

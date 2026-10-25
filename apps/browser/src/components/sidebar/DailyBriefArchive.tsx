@@ -1,5 +1,5 @@
 import { Symbol } from "@ardia/shell";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { briefArtworkForDate, briefTitleForDate } from "../briefs/assets";
 import { GlassFill } from "../glass";
@@ -7,11 +7,19 @@ import { localBriefDate, parseBriefDate } from "../../lib/briefDates";
 import { listDailyBriefDates, openDailyBrief } from "../../lib/dailyBriefs";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
+import { isIncognitoProfile } from "../../store/model";
 import { setSidebarUi, useSidebarUi } from "./state";
 
 export function DailyBriefArchive({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
   const open = useSidebarUi((s) => s.briefArchive === windowId);
-  return open ? <ArchivePanel windowId={windowId} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
+  const available = useBrowser((s) => {
+    const window = s.windows[windowId];
+    return !!window && !window.incognito && window.kind !== "small" && !isIncognitoProfile(window.profileId);
+  });
+  useEffect(() => {
+    if (open && !available) setSidebarUi({ briefArchive: null });
+  }, [open, available]);
+  return open && available ? <ArchivePanel windowId={windowId} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
 }
 
 function ArchivePanel({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
@@ -39,7 +47,7 @@ function ArchivePanel({ windowId, windowWidth, windowHeight }: { windowId: strin
         <Pressable accessibilityRole="button" accessibilityLabel="Close brief archive" onPress={close}><Symbol name="xmark" size={16} color={theme.textSecondary} /></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 13, paddingTop: 10, paddingBottom: 14 }}>
-        {shown.length ? shown.map((date) => <ArchiveRow key={date} date={date} onPress={() => choose(date)} />) : <View style={{ alignItems: "center", paddingVertical: 65, gap: 14 }}><Symbol name="doc.text" size={27} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontSize: 14 }}>{dates.length ? "No matching briefs" : "No briefs yet"}</Text>{!dates.length && <Pressable onPress={() => choose(localBriefDate())}><Text style={{ color: theme.textPrimary, fontSize: 14, fontWeight: "600" }}>Open today’s brief →</Text></Pressable>}</View>}
+        {shown.length ? shown.map((date) => <ArchiveRow key={date} date={date} onPress={() => choose(date)} />) : <View style={{ alignItems: "center", paddingVertical: 65, gap: 14 }}><Symbol name="doc.text" size={27} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontSize: 14 }}>No matching briefs</Text></View>}
       </ScrollView>
     </View>
   </>;

@@ -22,14 +22,20 @@ async function boundedFetch(url: string, init: RequestInit, timeout: number, ext
   if (externalSignal?.aborted) throw cancelled();
   const abort = () => controller.abort();
   externalSignal?.addEventListener("abort", abort);
-  const timer = setTimeout(abort, timeout);
+  let timedOut = false;
+  const oversized = new Error("The service returned too much data.");
+  const timer = setTimeout(() => { timedOut = true; abort(); }, timeout);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     const text = await response.text();
-    if (text.length > 256_000) throw new Error("The service returned too much data.");
+    if (externalSignal?.aborted) throw cancelled();
+    if (text.length > 256_000) throw oversized;
     const data: unknown = response.ok ? JSON.parse(text) : null;
     return { ok: response.ok, status: response.status, json: async () => data };
-  } catch {
+  } catch (error) {
+    if (externalSignal?.aborted) throw cancelled();
+    if (error === oversized) throw error;
+    if (timedOut) throw new Error("The service took too long to respond. Please try again.");
     throw new Error("The service could not be reached. Please try again.");
   } finally {
     clearTimeout(timer);
@@ -90,6 +96,45 @@ async function withDeadline<T>(task: Promise<T>, milliseconds: number): Promise<
   }
 }
 
+type GmailCollection = { messages: Awaited<ReturnType<typeof gmailMessages>>; email: string };
+let gmailCollection: { provider: string; promise: Promise<GmailCollection> } | null = null;
+
+function collectGmail(provider: string): Promise<GmailCollection> {
+  if (gmailCollection) return gmailCollection.provider === provider ? gmailCollection.promise : gmailCollection.promise.catch(() => {}).then(() => collectGmail(provider));
+  const run = async (): Promise<GmailCollection> => {
+    let permissionChanged = false;
+    let cancellation: Promise<void> | null = null;
+    const cancel = () => cancellation ??= cancelGmailCollection().catch(() => {});
+    const assertPermission = () => {
+      const current = useBrowser.getState().settings;
+      if (permissionChanged || !current.dailyBriefSources?.gmail || current.dailyBriefProvider !== provider) throw cancelled();
+    };
+    assertPermission();
+    const stop = useBrowser.subscribe((state) => {
+      if (!state.settings.dailyBriefSources?.gmail || state.settings.dailyBriefProvider !== provider) {
+        permissionChanged = true;
+        void cancel();
+      }
+    });
+    try {
+      const status = await withDeadline(gmailStatus(), 20_000);
+      assertPermission();
+      if (!status.connected) throw new Error("Gmail is not connected.");
+      const messages = await withDeadline(gmailMessages(), 20_000);
+      assertPermission();
+      return { messages, email: status.email };
+    } catch (reason) {
+      await cancel();
+      throw reason;
+    } finally {
+      stop();
+    }
+  };
+  const promise = run().finally(() => { if (gmailCollection?.promise === promise) gmailCollection = null; });
+  gmailCollection = { provider, promise };
+  return promise;
+}
+
 type GithubPR = { title: string; url: string; updatedAt: string; state: string; repository: { nameWithOwner: string }; reviewDecision: string | null; commits?: { nodes?: Array<{ commit?: { statusCheckRollup?: { state?: string } | null } }> } };
 const GITHUB_BRIEF_QUERY = `query DailyBrief($search: String!) {
   search(query: $search, type: ISSUE, first: 15) { nodes { ... on PullRequest { title url updatedAt state reviewDecision repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } }
@@ -133,34 +178,11 @@ export async function collectBriefContext(date?: string) {
     })().catch(() => { errors.push("GitHub was unavailable."); return []; }),
     (async () => {
       if (!consent.gmail) return [];
-      let permissionChanged = false;
-      const assertPermission = () => {
-        const current = useBrowser.getState().settings;
-        if (permissionChanged || !current.dailyBriefSources?.gmail || current.dailyBriefProvider !== provider) throw cancelled();
-      };
-      assertPermission();
-      const stop = useBrowser.subscribe((state) => {
-        if (!state.settings.dailyBriefSources?.gmail || state.settings.dailyBriefProvider !== provider) {
-          permissionChanged = true;
-          void cancelGmailCollection().catch(() => {});
-        }
-      });
-      try {
-        const status = await gmailStatus();
-        assertPermission();
-        if (!status.connected) throw new Error("Gmail is not connected.");
-        const messages = await withDeadline(gmailMessages(), 20_000);
-        assertPermission();
-        return messages.slice(0, 15).map((message) => ({ id: message.id.slice(0, 128), ...(gmailBriefUrl(status.email, message.id) ? { url: gmailBriefUrl(status.email, message.id)! } : {}), subject: message.subject.slice(0, 300), from: message.from.slice(0, 300), date: message.date.slice(0, 100), snippet: message.snippet.slice(0, 512) }));
-      } catch (reason) {
-        void cancelGmailCollection().catch(() => {});
-        throw reason;
-      } finally {
-        stop();
-      }
+      const { messages, email } = await collectGmail(provider);
+      return messages.slice(0, 15).map((message) => ({ id: message.id.slice(0, 128), ...(gmailBriefUrl(email, message.id) ? { url: gmailBriefUrl(email, message.id)! } : {}), subject: message.subject.slice(0, 300), from: message.from.slice(0, 300), date: message.date.slice(0, 100), snippet: message.snippet.slice(0, 512) }));
     })().catch(() => { errors.push("Gmail was unavailable."); return []; }),
   ]);
   const current = useBrowser.getState().settings;
   if (current.dailyBriefProvider !== provider || current.dailyBriefSources?.calendar !== consent.calendar || current.dailyBriefSources?.github !== consent.github || current.dailyBriefSources?.gmail !== consent.gmail) throw new Error("Brief permissions changed. Generate again with your current choices.");
-  return { date: now.toISOString(), localDate, localTime: now.toLocaleTimeString("en-US"), calendar, github, gmail, errors };
+  return { date: now.toISOString(), localDate, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, localTime: now.toLocaleTimeString("en-US"), calendar, github, gmail, errors };
 }

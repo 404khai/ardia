@@ -16,7 +16,7 @@ registerHooks({
 });
 const { useBrowser } = await import("../store/browser.ts");
 const { docs } = await import("../test-native-stub.mjs");
-const { generateBrief, loadDailyBrief, openDailyBrief, useDailyBriefs } = await import("./dailyBriefs.ts");
+const { deliverDailyBriefs, generateBrief, loadDailyBrief, openDailyBrief, useDailyBriefs } = await import("./dailyBriefs.ts");
 const { localBriefDate } = await import("./briefDates.ts");
 const content = { summary: "Today", focus: { title: "Review", body: "Read your PR" }, todos: [], updates: [], events: [] };
 const setup = () => {
@@ -37,7 +37,9 @@ test("dated briefs deduplicate within a profile and background delivery preserve
   assert.ok(id);
   assert.equal(s().windows[w].activeTabIds.default, active);
   assert.equal(openDailyBrief(w, today, true), id);
-  const previous = openDailyBrief(w, "2026-10-01", true);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const previous = openDailyBrief(w, localBriefDate(yesterday), true);
   assert.notEqual(previous, id);
   const privateWindow = s().createWindow({ incognito: true });
   assert.equal(openDailyBrief(privateWindow, today), null);
@@ -252,4 +254,73 @@ test("generated focus ignores extra model citations when only one PR is mentione
   await generateBrief("default", localBriefDate());
   generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
   assert.deepEqual(generated.focus.links.map((link) => link.url), github.map((item) => item.url));
+});
+
+
+test("automatic brief generation retries a transient failure without reopening a dismissed brief", async () => {
+  setup();
+  const window = useBrowser.getState().createWindow({ url: "https://example.com" });
+  useBrowser.getState().updateSettings({ dailyBriefEnabled: true, dailyBriefDelivery: "onOpen", dailyBriefLastOpened: "" });
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  let attempts = 0;
+  globalThis.briefGenerate = async () => { attempts++; if (attempts === 1) throw new Error("Temporary failure"); return JSON.stringify(content); };
+  await deliverDailyBriefs(now);
+  assert.equal(attempts, 1);
+  assert.equal(useBrowser.getState().settings.dailyBriefLastOpened, localBriefDate(now));
+  const briefTab = useBrowser.getState().windows[window].tabIds.find((id) => useBrowser.getState().tabs[id].url.startsWith("ardia://brief/"));
+  assert.ok(briefTab);
+  useBrowser.getState().closeTab(briefTab);
+  await deliverDailyBriefs(now);
+  assert.equal(attempts, 1);
+  await deliverDailyBriefs(new Date(now.getTime() + 5 * 60_000));
+  assert.equal(attempts, 2);
+  assert.ok(useDailyBriefs.getState().entries[`default/${localBriefDate(now)}`].content);
+  assert.equal(useBrowser.getState().windows[window].tabIds.some((id) => useBrowser.getState().tabs[id].url.startsWith("ardia://brief/")), false);
+  await deliverDailyBriefs(new Date(now.getTime() + 10 * 60_000));
+  assert.equal(attempts, 2);
+});
+
+test("automatic failures have a persisted three-attempt daily limit", async () => {
+  setup();
+  useBrowser.getState().createWindow({ url: "https://example.com" });
+  useBrowser.getState().updateSettings({ dailyBriefEnabled: true, dailyBriefDelivery: "onOpen", dailyBriefLastOpened: "" });
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  let attempts = 0;
+  globalThis.briefGenerate = async () => { attempts++; throw new Error("Temporary failure"); };
+  for (let i = 0; i < 4; i++) await deliverDailyBriefs(new Date(now.getTime() + i * 5 * 60_000));
+  assert.equal(attempts, 3);
+  assert.equal(JSON.parse(docs.get("daily-brief-attempts.json")).profiles.default.count, 3);
+  useDailyBriefs.setState({ entries: {} });
+  await deliverDailyBriefs(new Date(now.getTime() + 20 * 60_000));
+  assert.equal(attempts, 3);
+});
+
+test("source title matching does not accept a partial trailing word", async () => {
+  setup();
+  globalThis.briefCollect = async () => ({ github: [{ title: "Authentication refresh", url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" }], gmail: [], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Authentication refreshed", body: "Read the notification." }, updates: [{ title: "Authentication refreshed", body: "Read the notification." }] });
+  await generateBrief("default", localBriefDate());
+  const generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.deepEqual(generated.focus.links, []);
+  assert.equal(generated.updates[0].source, undefined);
+});
+
+test("meeting schedule uses calendar timestamps instead of model generated UTC strings", async () => {
+  setup();
+  const start = "2026-10-25T17:00:00.000Z", end = "2026-10-25T17:15:00.000Z";
+  globalThis.briefCollect = async () => ({ github: [], gmail: [], calendar: [{ title: "Bachs Intro", start, end, allDay: false }] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, events: [{ title: "Bachs Intro", time: "2026-10-25T17:00:00.000Z", body: "Timestamps are UTC; no timezone provided." }, { title: "Invented meeting", time: "09:00", body: "Not in the calendar." }] });
+  await generateBrief("default", localBriefDate());
+  const event = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.events;
+  assert.equal(event.length, 1);
+  assert.equal(event[0].title, "Bachs Intro");
+  assert.equal(event[0].start, start);
+  assert.equal(event[0].end, end);
+  assert.doesNotMatch(event[0].time, /2026|UTC|T17/);
+  assert.equal(event[0].body, "15-minute calendar event.");
+  useDailyBriefs.setState({ entries: {} });
+  loadDailyBrief("default", localBriefDate());
+  assert.deepEqual(useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.events, event);
 });

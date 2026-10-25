@@ -137,3 +137,13 @@ test("focus popup respects an explicit repository even when only the wrong PR is
   assert.deepEqual(focusDisplayLinks({ title: "Prepare the PRs", body: "Check Fix sidebar clipping during live resize.", links: [first, second] }), [first]);
   assert.deepEqual(focusDisplayLinks({ title: "Prepare the PRs", body: "Check Fix sidebar clipping during live resize and Repair calendar permission handling.", links: [first, second] }), []);
 });
+
+test("meeting times use local readable start and range for structured and legacy timestamps", async () => {
+  const { briefEventTime } = await import("./briefContent.ts");
+  const event = { title: "Bachs Intro", body: "15-minute introductory call via Google Meet.", time: "raw", start: "2026-10-25T17:00:00.000Z", end: "2026-10-25T17:15:00.000Z" };
+  assert.deepEqual(briefEventTime(event, "Africa/Lagos"), { start: "6:00pm", range: "6:00 PM – 6:15 PM", body: event.body });
+  assert.equal(briefEventTime({ ...event, start: undefined, end: undefined, time: "2026-10-25T07:00:00.000Z" }, "Africa/Lagos").start, "8:00am");
+  assert.deepEqual(briefEventTime({ title: "Call", time: "2026-10-25 04:45–05:45 UTC", body: "The supplied timestamps are in UTC; no local timezone was provided." }, "Africa/Lagos"), { start: "5:45am", range: "5:45 AM – 6:45 AM", body: "1-hour calendar event." });
+  assert.equal(briefEventTime({ ...event, allDay: true }).start, "All day");
+  assert.equal(briefEventTime({ title: "Call", body: "Invitation pending.", time: "invalid" }).start, "TBD");
+});

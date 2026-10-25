@@ -1,3 +1,9 @@
+private actor GmailCallbackCompletion {
+  private var complete = false
+  func finish() { complete = true }
+  func isComplete() -> Bool { complete }
+}
+
 
 actor GmailRefreshFixture {
   static let shared = GmailRefreshFixture()
@@ -81,6 +87,18 @@ struct GmailTests {
     _ = try await cancelled.start()
     cancelled.cancel()
     do { _ = try await cancelled.wait(); preconditionFailure("Cancelled callback succeeded") } catch {}
-    print("Gmail callback and token validation passed")
+    let stopped = try GmailCallback(state: "stopped")
+    _ = try await stopped.start()
+    let completion = GmailCallbackCompletion()
+    let waiting = Task {
+      do { _ = try await stopped.wait(); preconditionFailure("Stopped Gmail callback succeeded") }
+      catch { await completion.finish() }
+    }
+    stopped.listener.cancel()
+    for _ in 0..<50 {
+      if await completion.isComplete() { _ = await waiting.value; print("Gmail callback and token validation passed"); return }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    preconditionFailure("Gmail listener failure after ready left sign-in suspended")
   }
 }

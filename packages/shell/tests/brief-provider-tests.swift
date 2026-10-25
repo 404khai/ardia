@@ -18,12 +18,104 @@ extension BriefChatGPT {
   }
 }
 
+private actor BriefCompletionFlag {
+  private var complete = false
+  func finish() { complete = true }
+  func isComplete() -> Bool { complete }
+}
+
 @main struct Tests {
+  private static func fixtureStore() throws -> BriefCredentialStore {
+    var store = try BriefSecrets.load()
+    store.active = "registered-client"
+    store.accounts["registered-client"] = BriefCredential(clientId: "registered-client", subject: "fixture-subject", email: "fixture@example.invalid", accessToken: "fixture-access", refreshToken: nil, idToken: "fixture-id-token", expiresAt: Date().timeIntervalSince1970 + 3600, scopes: ["chatgpt.tokens.use.direct", "resource.invoke"])
+    try BriefSecrets.save(store)
+    return store
+  }
+
+  private static func testReviewCase(_ name: String) async throws {
+    let provider = BriefChatGPT()
+    switch name {
+    case "isolated-storage":
+      let saved = try fixtureStore()
+      let path = URL(fileURLWithPath: ACIsolatedDataDirectory()!).appendingPathComponent("Brief Provider Credentials.json").path
+      precondition(!FileManager.default.fileExists(atPath: path), "Isolated ChatGPT credentials were written as plaintext JSON")
+      let account = BriefSecrets.query[kSecAttrAccount as String] as! String
+      precondition(account.hasPrefix("Ardia Daily Briefs ChatGPT:"), "Isolated ChatGPT credentials share the production Keychain item")
+      let loaded = try BriefSecrets.load()
+      precondition(loaded.hostId == saved.hostId)
+    case "isolated-migration":
+      let store = BriefCredentialStore(hostId: "urn:uuid:fixture-host", active: "fixture-client", accounts: ["fixture-client": BriefCredential(clientId: "fixture-client", subject: "fixture-subject", email: "fixture@example.invalid", accessToken: "fake-access", refreshToken: "fake-refresh", idToken: "fake-id", expiresAt: 42, scopes: ["resource.invoke"])])
+      let directory = URL(fileURLWithPath: ACIsolatedDataDirectory()!)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let url = directory.appendingPathComponent("Brief Provider Credentials.json")
+      try JSONEncoder().encode(store).write(to: url, options: .atomic)
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+      let loaded = try BriefSecrets.load()
+      precondition(loaded.hostId == store.hostId && loaded.active == store.active)
+      precondition(loaded.accounts["fixture-client"]?.refreshToken == "fake-refresh")
+      precondition(!FileManager.default.fileExists(atPath: url.path), "Legacy isolated credentials remained plaintext after migration")
+      let restored = try BriefSecrets.load()
+      precondition(restored.accounts["fixture-client"]?.idToken == "fake-id")
+    case "disconnect-account":
+      let saved = try fixtureStore()
+      _ = try await provider.disconnect()
+      let result = try await provider.begin()
+      let query = Dictionary(uniqueKeysWithValues: URLComponents(string: result["authorizationUrl"]!)!.queryItems!.map { ($0.name, $0.value!) })
+      precondition(query["client_id"] == "dynamic_agent_client", "Disconnect retained the previous active account registration")
+      precondition(query["id_token_hint"] == nil)
+      precondition(query["ext_agent_host_id"] == saved.hostId)
+      await provider.cancel()
+    case "reauthorization-hint":
+      _ = try fixtureStore()
+      let result = try await provider.begin()
+      let query = Dictionary(uniqueKeysWithValues: URLComponents(string: result["authorizationUrl"]!)!.queryItems!.map { ($0.name, $0.value!) })
+      precondition(query["client_id"] == "registered-client")
+      precondition(query["id_token_hint"] == "fixture-id-token", "Reauthorization omitted the selected account identity hint")
+      precondition(query["login_hint"] == "fixture@example.invalid")
+      await provider.cancel()
+    case "callback-prestart-cancel":
+      let callback = try BriefCallback(state: "fixture-state")
+      callback.cancel()
+      let completed = BriefCompletionFlag()
+      let starting = Task {
+        do { _ = try await callback.start(); preconditionFailure("Precancelled callback started") }
+        catch { await completed.finish() }
+      }
+      for _ in 0..<50 {
+        if await completed.isComplete() { _ = await starting.value; print("PASS callback-prestart-cancel"); return }
+        try await Task.sleep(nanoseconds: 10_000_000)
+      }
+      preconditionFailure("Precancelled callback left startup suspended")
+    case "callback-terminal":
+      let callback = try BriefCallback(state: "fixture-state")
+      _ = try await callback.start()
+      let completed = BriefCompletionFlag()
+      let waiting = Task {
+        do { _ = try await callback.wait(); preconditionFailure("Stopped callback succeeded") }
+        catch { await completed.finish() }
+      }
+      callback.listener.cancel()
+      for _ in 0..<50 {
+        if await completed.isComplete() { _ = await waiting.value; print("PASS callback-terminal"); return }
+        try await Task.sleep(nanoseconds: 10_000_000)
+      }
+      preconditionFailure("A listener terminal state after ready left the OAuth waiter suspended")
+    default: preconditionFailure("Unknown review case")
+    }
+    print("PASS \(name)")
+  }
+
   private static func assertDisconnected(_ provider: BriefChatGPT) async throws {
     let status = try await provider.status()
     precondition(status["connected"] as? Bool == false)
   }
   static func main() async throws {
+    defer { SecItemDelete(BriefSecrets.query as CFDictionary) }
+    if let reviewCase = ProcessInfo.processInfo.environment["ARDIA_BRIEF_REVIEW_CASE"], reviewCase != "baseline" {
+      try await testReviewCase(reviewCase)
+      return
+    }
     let provider = BriefChatGPT()
     try await provider.testCrypto()
     try await assertDisconnected(provider)
@@ -73,11 +165,13 @@ extension BriefChatGPT {
       if Date() > deadline { fatalError("The model lookup did not start before the deadline") }
       try await Task.sleep(nanoseconds: 20_000_000)
     }
+    let cancelledAt = Date()
     await provider.cancelGeneration()
     do {
       _ = try await generation.value
       fatalError("Generation continued after consent changed")
     } catch {}
+    precondition(Date().timeIntervalSince(cancelledAt) < 0.5, "Cancellation waited for the uncancelled model catalog request")
     let requests = try String(contentsOfFile: requestsPath, encoding: .utf8)
     precondition(requests.contains("/v1/models"))
     precondition(!requests.contains("/v1/responses"))

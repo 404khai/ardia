@@ -3,10 +3,10 @@ import { create } from "zustand";
 import { collectBriefContext, generateClaudeBrief } from "../components/settings/briefContext";
 import { useBrowser } from "../store/browser";
 import { isIncognitoProfile } from "../store/model";
-import { briefDateFromUrl, briefDue, localBriefDate } from "./briefDates";
+import { briefDateFromUrl, briefDue, briefRetryDue, localBriefDate } from "./briefDates";
 import { retainedBriefDates } from "./briefRetention";
 
-import { briefSummary, focusBriefLinks, parseBriefContent, updateBriefSource, type BriefContent } from "./briefContent";
+import { briefSummary, briefEventTime, focusBriefLinks, parseBriefContent, updateBriefSource, type BriefContent } from "./briefContent";
 export type { BriefContent } from "./briefContent";
 type Entry = { content?: BriefContent; loading?: boolean; error?: string | null };
 export const useDailyBriefs = create<{ entries: Record<string, Entry> }>(() => ({ entries: {} }));
@@ -95,6 +95,12 @@ export async function generateBrief(profileId: string, date: string) {
     content.focus = bindSource(content.focus);
     content.todos = content.todos.map(bindSource);
     content.updates = content.updates.map(bindSource);
+    content.events = (context.calendar ?? []).map((event) => {
+      const generated = content.events.find((candidate) => candidate.title.trim().toLocaleLowerCase() === event.title.trim().toLocaleLowerCase());
+      const item = { title: event.title, body: generated?.body ?? "Calendar event.", time: "", start: event.start, end: event.end, allDay: event.allDay };
+      const display = briefEventTime(item);
+      return { ...item, time: display.range, body: display.body };
+    });
     saveBrief(key, content);
     patch(key, { content, loading: false });
   } catch (error) {
@@ -122,22 +128,56 @@ export function openDailyBrief(windowId: string, date = localBriefDate(), backgr
   return typeof id === "string" ? id : null;
 }
 
-export function startDailyBriefs() {
-  const tick = () => {
-    const s = useBrowser.getState();
-    if (!briefDue(s.settings)) return;
-    const windowId = [s.ui.focusedWindowId, ...s.windowOrder].find((id) => {
-      const w = id ? s.windows[id] : null;
-      return w && !w.incognito && w.kind !== "small" && !isIncognitoProfile(w.profileId);
-    });
-    if (!windowId) return;
-    const date = localBriefDate();
+const automaticPending = new Set<string>();
+
+type BriefAttempts = Record<string, { count: number; lastAttempt: number }>;
+
+function automaticAttempts(date: string): BriefAttempts {
+  try {
+    const saved = JSON.parse(readDocument("daily-brief-attempts.json") ?? "{}");
+    if (saved.date !== date || !saved.profiles || typeof saved.profiles !== "object") return {};
+    return Object.fromEntries(Object.entries(saved.profiles).filter((entry): entry is [string, { count: number; lastAttempt: number }] => {
+      const value = entry[1] as { count?: unknown; lastAttempt?: unknown } | null;
+      return !!value && typeof value.count === "number" && Number.isInteger(value.count) && value.count >= 0 && typeof value.lastAttempt === "number" && Number.isFinite(value.lastAttempt);
+    }));
+  } catch {
+    return {};
+  }
+}
+
+export async function deliverDailyBriefs(now = new Date()): Promise<void> {
+  const s = useBrowser.getState();
+  if (!s.settings.dailyBriefEnabled) return;
+  const date = localBriefDate(now);
+  const due = briefDue(s.settings, now);
+  if (!due && s.settings.dailyBriefLastOpened !== date) return;
+  const windowId = [s.ui.focusedWindowId, ...s.windowOrder].find((id) => {
+    const w = id ? s.windows[id] : null;
+    return w && !w.incognito && w.kind !== "small" && !isIncognitoProfile(w.profileId);
+  });
+  if (!windowId) return;
+  if (due) {
+    if (!openDailyBrief(windowId, date, true)) return;
     s.updateSettings({ dailyBriefLastOpened: date });
-    openDailyBrief(windowId, date, true);
-    const profileId = s.windows[windowId]!.profileId;
-    loadDailyBrief(profileId, date);
-    if (!useDailyBriefs.getState().entries[keyFor(profileId, date)]?.content) void generateBrief(profileId, date);
-  };
+  }
+  const profileId = s.windows[windowId]!.profileId;
+  const key = keyFor(profileId, date);
+  loadDailyBrief(profileId, date);
+  if (useDailyBriefs.getState().entries[key]?.content || pending.has(key) || automaticPending.has(key)) return;
+  const attempts = automaticAttempts(date);
+  if (!briefRetryDue(attempts[profileId], now.getTime())) return;
+  attempts[profileId] = { count: (attempts[profileId]?.count ?? 0) + 1, lastAttempt: now.getTime() };
+  writeDocument("daily-brief-attempts.json", JSON.stringify({ date, profiles: attempts }));
+  automaticPending.add(key);
+  try {
+    await generateBrief(profileId, date);
+  } finally {
+    automaticPending.delete(key);
+  }
+}
+
+export function startDailyBriefs() {
+  const tick = () => { void deliverDailyBriefs().catch(() => {}); };
   const timer = setInterval(tick, 30_000);
   const initial = setTimeout(tick, 1000);
   return () => { clearInterval(timer); clearTimeout(initial); };

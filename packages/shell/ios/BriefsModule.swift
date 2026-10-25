@@ -61,17 +61,14 @@ private struct BriefCredentialStore: Codable {
 
 private enum BriefSecrets {
   static let account = "Ardia Daily Briefs ChatGPT"
-  static var isolatedURL: URL? {
+  private static var legacyIsolatedURL: URL? {
     ACIsolatedDataDirectory().map { URL(fileURLWithPath: $0).appendingPathComponent("Brief Provider Credentials.json") }
   }
   static var query: [String: Any] {
-    [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "Ardia Connected Accounts", kSecAttrAccount as String: account]
+    let suffix = ACIsolatedDataDirectory().map { ":" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
+    return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "Ardia Connected Accounts", kSecAttrAccount as String: account + suffix]
   }
   static func load() throws -> BriefCredentialStore {
-    if let url = isolatedURL {
-      if !FileManager.default.fileExists(atPath: url.path) { return BriefCredentialStore() }
-      return try JSONDecoder().decode(BriefCredentialStore.self, from: Data(contentsOf: url))
-    }
     var q = query
     q[kSecReturnData as String] = true
     q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -80,18 +77,19 @@ private enum BriefSecrets {
     q[kSecUseAuthenticationContext as String] = context
     var result: CFTypeRef?
     let status = SecItemCopyMatching(q as CFDictionary, &result)
-    if status == errSecItemNotFound { return BriefCredentialStore() }
+    if status == errSecItemNotFound {
+      guard let url = legacyIsolatedURL, FileManager.default.fileExists(atPath: url.path) else { return BriefCredentialStore() }
+      let store = try JSONDecoder().decode(BriefCredentialStore.self, from: Data(contentsOf: url))
+      try save(store)
+      return store
+    }
     guard status == errSecSuccess, let data = result as? Data else { throw briefError("Couldn’t read ChatGPT credentials from Keychain.") }
-    return try JSONDecoder().decode(BriefCredentialStore.self, from: data)
+    let store = try JSONDecoder().decode(BriefCredentialStore.self, from: data)
+    try removeLegacyIsolatedFile()
+    return store
   }
   static func save(_ store: BriefCredentialStore) throws {
     let data = try JSONEncoder().encode(store)
-    if let url = isolatedURL {
-      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try data.write(to: url, options: .atomic)
-      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-      return
-    }
     let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
     if status == errSecItemNotFound {
       var q = query
@@ -101,21 +99,34 @@ private enum BriefSecrets {
     } else if status != errSecSuccess {
       throw briefError("Couldn’t update ChatGPT credentials in Keychain.")
     }
+    try removeLegacyIsolatedFile()
+  }
+  private static func removeLegacyIsolatedFile() throws {
+    if let url = legacyIsolatedURL, FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
   }
 }
 
-private final class BriefCallback: @unchecked Sendable {
+struct OAuthLoopbackError: LocalizedError {
+  let message: String
+  var errorDescription: String? { message }
+}
+
+final class OAuthLoopbackCallback: @unchecked Sendable {
   let listener: NWListener
-  let queue = DispatchQueue(label: "dev.ardia.brief-oauth")
+  let queue: DispatchQueue
   let state: String
+  private let service: String
   private var result: Result<[String: String], Error>?
   private var waiter: CheckedContinuation<[String: String], Error>?
   private var connections: [NWConnection] = []
   private var startup: CheckedContinuation<UInt16, Error>?
   private var timeout: DispatchWorkItem?
+  private var started = false
 
-  init(state: String) throws {
+  init(state: String, service: String = "ChatGPT") throws {
     self.state = state
+    self.service = service
+    queue = DispatchQueue(label: "dev.ardia.oauth.\(service.lowercased())")
     let parameters = NWParameters.tcp
     parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
     listener = try NWListener(using: parameters)
@@ -124,16 +135,24 @@ private final class BriefCallback: @unchecked Sendable {
   func start() async throws -> UInt16 {
     try await withCheckedThrowingContinuation { continuation in
       queue.async { [self] in
+        if let result {
+          switch result {
+          case .failure(let error): continuation.resume(throwing: error)
+          case .success: continuation.resume(throwing: self.error("sign-in callback has already completed."))
+          }
+          return
+        }
+        guard !started else { continuation.resume(throwing: self.error("sign-in callback has already started.")); return }
+        started = true
         self.startup = continuation
         self.listener.stateUpdateHandler = { status in
-          guard let startup = self.startup else { return }
           switch status {
           case .ready:
+            guard let startup = self.startup, let port = self.listener.port else { return }
             self.startup = nil
-            startup.resume(returning: self.listener.port!.rawValue)
+            startup.resume(returning: port.rawValue)
           case .failed(_), .cancelled:
-            self.startup = nil
-            startup.resume(throwing: briefError("Couldn’t start the local ChatGPT sign-in callback."))
+            self.finish(.failure(self.error("sign-in callback stopped unexpectedly. Try again.")))
           default: break
           }
         }
@@ -152,11 +171,11 @@ private final class BriefCallback: @unchecked Sendable {
           self.receive(connection, buffer: Data())
         }
         self.listener.start(queue: self.queue)
-        let deadline = DispatchWorkItem { self.finish(.failure(briefError("ChatGPT sign-in timed out. Try again."))) }
+        let deadline = DispatchWorkItem { self.finish(.failure(self.error("sign-in timed out. Try again."))) }
         self.timeout = deadline
         self.queue.asyncAfter(deadline: .now() + 180, execute: deadline)
         self.queue.asyncAfter(deadline: .now() + 10) {
-          if self.startup != nil { self.finish(.failure(briefError("Couldn’t start the local sign-in callback in time."))) }
+          if self.startup != nil { self.finish(.failure(self.error("sign-in callback could not start in time."))) }
         }
       }
     }
@@ -166,15 +185,17 @@ private final class BriefCallback: @unchecked Sendable {
     try await withCheckedThrowingContinuation { continuation in
       queue.async {
         if let result = self.result { continuation.resume(with: result) }
-        else if self.waiter != nil { continuation.resume(throwing: briefError("ChatGPT sign-in is already being completed.")) }
+        else if self.waiter != nil { continuation.resume(throwing: self.error("sign-in is already being completed.")) }
         else { self.waiter = continuation }
       }
     }
   }
 
   func cancel() {
-    queue.async { self.finish(.failure(briefError("ChatGPT sign-in was cancelled."))) }
+    queue.async { self.finish(.failure(self.error("sign-in was cancelled."))) }
   }
+
+  private func error(_ message: String) -> OAuthLoopbackError { OAuthLoopbackError(message: "\(service) \(message)") }
 
   private func receive(_ connection: NWConnection, buffer: Data) {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, ended, error in
@@ -208,8 +229,13 @@ private final class BriefCallback: @unchecked Sendable {
   private func finish(_ value: Result<[String: String], Error>, keeping: NWConnection? = nil) {
     guard result == nil else { return }
     result = value
-    startup?.resume(throwing: briefError("ChatGPT sign-in callback was cancelled or timed out."))
-    startup = nil
+    if let startup {
+      switch value {
+      case .failure(let error): startup.resume(throwing: error)
+      case .success: startup.resume(throwing: self.error("sign-in callback completed before startup."))
+      }
+      self.startup = nil
+    }
     timeout?.cancel()
     timeout = nil
     listener.stateUpdateHandler = nil
@@ -221,6 +247,8 @@ private final class BriefCallback: @unchecked Sendable {
     waiter = nil
   }
 }
+
+private typealias BriefCallback = OAuthLoopbackCallback
 
 private struct BriefSignIn {
   let id: UUID
@@ -260,6 +288,7 @@ private actor BriefChatGPT {
     var fields = ["client_id": previous?.clientId ?? "dynamic_agent_client", "ext_agent_host_id": store.hostId, "response_type": "code", "redirect_uri": redirect, "scope": "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct", "resource": resource, "state": state, "nonce": nonce, "code_challenge_method": "S256", "code_challenge": encode(Data(SHA256.hash(data: Data(verifier.utf8))))]
     if previous == nil { fields["agent_name_hint"] = "Ardia" }
     if let email = previous?.email, !email.isEmpty { fields["login_hint"] = email }
+    if let idToken = previous?.idToken, !idToken.isEmpty { fields["id_token_hint"] = idToken }
     var url = URLComponents(string: "\(base)/api/accounts/authorize")!
     url.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
     pending = BriefSignIn(id: UUID(), callback: callback, nonce: nonce, verifier: verifier, redirect: redirect, previous: previous)
@@ -316,6 +345,7 @@ private actor BriefChatGPT {
     account.idToken = nil
     account.expiresAt = 0
     store.accounts[active] = account
+    store.active = nil
     try BriefSecrets.save(store)
     guard let token else { return true }
     do {
@@ -341,11 +371,20 @@ private actor BriefChatGPT {
     defer { busy = false }
     var store = try BriefSecrets.load()
     guard let active = store.active, var account = store.accounts[active], account.accessToken != nil else { throw briefError("Connect ChatGPT in Daily Briefs settings first.") }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = 120
+    configuration.timeoutIntervalForResource = 150
+    let session = URLSession(configuration: configuration)
+    generationSession = session
+    defer {
+      session.invalidateAndCancel()
+      if generationSession === session { generationSession = nil }
+    }
     if account.expiresAt < Date().timeIntervalSince1970 + 60 {
       guard let refreshToken = account.refreshToken else { throw briefError("Sign in to ChatGPT again to renew access.") }
-      let token = try await post("\(base)/api/accounts/oauth/token", ["grant_type": "refresh_token", "client_id": active, "refresh_token": refreshToken, "resource": resource])
+      let token = try await post("\(base)/api/accounts/oauth/token", ["grant_type": "refresh_token", "client_id": active, "refresh_token": refreshToken, "resource": resource], using: session)
       account = try credential(token, clientId: active, subject: account.subject, email: account.email, previous: account)
-      guard generation == epoch else { throw briefError("ChatGPT was disconnected.") }
+      guard generation == epoch, revision == generationRevision else { throw briefError("Brief generation was cancelled.") }
       store.accounts[active] = account
       try BriefSecrets.save(store)
     }
@@ -353,7 +392,7 @@ private actor BriefChatGPT {
     guard let accessToken = account.accessToken, account.scopes.contains("chatgpt.tokens.use.direct") else { throw briefError("ChatGPT plan usage was not authorized. Sign in again and approve plan usage.") }
     var catalogRequest = URLRequest(url: URL(string: "\(resource)/models")!, timeoutInterval: 30)
     catalogRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-    let catalogData = try await send(catalogRequest)
+    let catalogData = try await send(catalogRequest, using: session)
     guard generation == epoch, revision == generationRevision else { throw briefError("Brief generation was cancelled.") }
     let catalog = try JSONSerialization.jsonObject(with: catalogData) as? [String: Any]
     let models = (catalog?["models"] as? [[String: Any]] ?? []).filter { $0["visibility"] as? String == "list" }
@@ -365,15 +404,6 @@ private actor BriefChatGPT {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
     request.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "instructions": instructions, "input": [["role": "user", "content": context]], "store": false, "stream": true])
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = 120
-    configuration.timeoutIntervalForResource = 150
-    let session = URLSession(configuration: configuration)
-    generationSession = session
-    defer {
-      session.invalidateAndCancel()
-      if generationSession === session { generationSession = nil }
-    }
     guard generation == epoch, revision == generationRevision else { throw briefError("Brief generation was cancelled.") }
     let (bytes, response) = try await session.bytes(for: request)
     guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { throw briefError("ChatGPT couldn’t generate this brief. Check your plan permissions and usage limits.") }
@@ -423,28 +453,28 @@ private actor BriefChatGPT {
     return data
   }
 
-  private func raw(_ url: String, fields: [String: String]) async throws -> Data {
+  private func raw(_ url: String, fields: [String: String], using session: URLSession? = nil) async throws -> Data {
     var request = URLRequest(url: URL(string: url)!, timeoutInterval: 30)
     request.httpMethod = "POST"
     request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
     var allowed = CharacterSet.alphanumerics
     allowed.insert(charactersIn: "-._~")
     request.httpBody = fields.map { "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)" }.joined(separator: "&").data(using: .utf8)
-    return try await send(request)
+    return try await send(request, using: session)
   }
 
-  private func post(_ url: String, _ fields: [String: String]) async throws -> [String: Any] {
-    let data = try await raw(url, fields: fields)
+  private func post(_ url: String, _ fields: [String: String], using session: URLSession? = nil) async throws -> [String: Any] {
+    let data = try await raw(url, fields: fields, using: session)
     guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw briefError("ChatGPT returned an invalid response.") }
     return value
   }
 
-  private func send(_ request: URLRequest) async throws -> Data {
+  private func send(_ request: URLRequest, using borrowed: URLSession? = nil) async throws -> Data {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 30
     configuration.timeoutIntervalForResource = 45
-    let session = URLSession(configuration: configuration)
-    defer { session.invalidateAndCancel() }
+    let session = borrowed ?? URLSession(configuration: configuration)
+    defer { if borrowed == nil { session.invalidateAndCancel() } }
     let (data, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { throw briefError("ChatGPT rejected the request. Sign in again or check your connection and plan permissions.") }
     guard data.count <= 1000000 else { throw briefError("ChatGPT returned an oversized response.") }

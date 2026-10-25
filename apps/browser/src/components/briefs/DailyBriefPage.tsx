@@ -5,7 +5,7 @@ import { BriefSourceLink } from "./BriefSourceLink";
 import { BriefFooterIcon } from "./BriefFooterIcon";
 import { useWindowId } from "../../store/hooks";
 import { registerBriefView } from "./devDriver";
-import { briefSummary, focusDisplayLinks, type BriefContent } from "../../lib/briefContent";
+import { briefEventTime, briefSummary, focusDisplayLinks, type BriefContent } from "../../lib/briefContent";
 export type { BriefContent } from "../../lib/briefContent";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { briefArtworkForDate, briefDate } from "./assets";
@@ -42,6 +42,7 @@ export function DailyBriefPage({ date, onConfigure, content, loading = false, er
   const summary = content ? briefSummary(content.summary) : undefined;
 
   const updates = content?.updates ?? [];
+  const events = content?.events.map((event) => ({ ...event, display: briefEventTime(event) })) ?? [];
 
   return (
     <ScrollView ref={registerScroll} style={styles.root} contentContainerStyle={styles.scroll} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} testID="daily-brief-page">
@@ -78,7 +79,7 @@ export function DailyBriefPage({ date, onConfigure, content, loading = false, er
           </View>
         </View>
         <View style={{ position: "absolute", left: 21, bottom: -26, zIndex: 20 }}>
-          <BriefBadge title={content ? "Let's\ndo it →" : "Make it\nyours →"} links={content ? focusDisplayLinks(content.focus) : undefined} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content ? undefined : configure} />
+          <BriefBadge title={content ? "Let's\ndo it →" : "Make it\nyours →"} links={content ? focusDisplayLinks(content.focus) : undefined} maxWidth={Math.min(360, width - 24)} popupBounds={{ left: 12 - gutter - 21, right: width - 12 - gutter - 21 }} onPress={content ? undefined : configure} />
         </View>
         </View>
         <View style={[styles.section, { flexDirection: wide ? "row" : "column" }]}>
@@ -99,9 +100,9 @@ export function DailyBriefPage({ date, onConfigure, content, loading = false, er
           {content && !content.updates.length && <Text style={[styles.body, { marginTop: 28 }]}>Nothing new needs your attention.</Text>}
           {!content && <Text style={[styles.body, { marginTop: 28 }]}>The important updates from Gmail and GitHub will be gathered into one calm place.</Text>}
         </View>
-        {!!content?.events.length && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
-          <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{content.events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.time}</Text><Text style={[styles.eventName, { flex: 1 }]}>{event.title}</Text></View>)}</View>
-          <View style={styles.rightColumn}>{content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>)}</View>
+        {!!events.length && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
+          <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.display.start}</Text><Text style={styles.eventName}>{event.title}</Text></View>)}</View>
+          <View style={styles.rightColumn}>{events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.display.range}</Text><Text style={styles.body}>{event.display.body}</Text></View>)}</View>
         </View>}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <BriefFooterIcon service="github" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <BriefFooterIcon service="gmail" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <BriefFooterIcon service="calendar" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
@@ -114,12 +115,15 @@ export function DailyBriefPage({ date, onConfigure, content, loading = false, er
 }
 
 function TodoItems({ items }: { items: BriefContent["todos"] }) {
-  const [completed, setCompleted] = useState<Set<number>>(() => new Set());
+  const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   if (!items.length) return <Text style={styles.body}>Nothing urgent. Make room for your own priorities.</Text>;
-  return <>{items.map((item, i) => <View key={i} style={{ flexDirection: "row", gap: 14, marginBottom: 22 }}>
-    <Pressable accessibilityRole="checkbox" accessibilityLabel={item.title} accessibilityState={{ checked: completed.has(i) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(i)) next.delete(i); else next.add(i); return next; })} style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(i) ? "#ffe500" : "#53534f", backgroundColor: completed.has(i) ? "#ffe500" : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(i) && <Text style={styles.checkmark}>✓</Text>}</Pressable>
-    <View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(i) && { textDecorationLine: "line-through", color: "#77756e" }]}>{item.title}</Text><Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text></View>
-  </View>)}</>;
+  return <>{items.map((item) => {
+    const identity = JSON.stringify([item.title, item.body, item.source?.url]);
+    return <View key={identity} style={{ flexDirection: "row", gap: 14, marginBottom: 22 }}>
+    <Pressable accessibilityRole="checkbox" accessibilityLabel={item.title} accessibilityState={{ checked: completed.has(identity) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(identity)) next.delete(identity); else next.add(identity); return next; })} style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(identity) ? "#ffe500" : "#53534f", backgroundColor: completed.has(identity) ? "#ffe500" : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(identity) && <Text style={styles.checkmark}>✓</Text>}</Pressable>
+    <View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(identity) && { textDecorationLine: "line-through", color: "#77756e" }]}>{item.title}</Text><Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text></View>
+  </View>;
+  })}</>;
 }
 
 const styles = StyleSheet.create({
@@ -144,9 +148,9 @@ const styles = StyleSheet.create({
   checkmark: { fontSize: 12, color: "#101010" },
   number: { color: "#4a4843", fontFamily: "Georgia", fontSize: 13, marginTop: 24 },
   project: { color: "#757168", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "400", fontSize: 14 },
-  calendarEvent: { marginTop: 20, marginLeft: -7, marginRight: -14, backgroundColor: "#20201e", borderRadius: 5, paddingHorizontal: 9, paddingVertical: 10, flexDirection: "row", gap: 18 },
-  eventTime: { fontFamily: "Menlo", fontSize: 12, color: "#777166" },
-  eventName: { color: "#e5e5e1", fontSize: 15, fontWeight: "600" },
+  calendarEvent: { marginTop: 20, marginLeft: -7, marginRight: -14, backgroundColor: "#20201e", borderRadius: 5, paddingHorizontal: 9, paddingVertical: 10, flexDirection: "row", alignItems: "baseline", gap: 12 },
+  eventTime: { width: 56, flexShrink: 0, fontFamily: "Menlo", fontSize: 11.5, lineHeight: 22, color: "#969187" },
+  eventName: { flex: 1, minWidth: 0, color: "#e5e5e1", fontSize: 15, lineHeight: 22, fontWeight: "600" },
   footer: { marginTop: 70, alignItems: "center", gap: 20, paddingHorizontal: 10 },
   footerText: { color: "#8d8a82", fontFamily: "Georgia", fontSize: 20, textAlign: "center", lineHeight: 30 },
   footerName: { color: "#eeeeeb" },

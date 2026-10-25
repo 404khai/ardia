@@ -98,123 +98,7 @@ private final class GmailRedirectDelegate: NSObject, URLSessionTaskDelegate, @un
   func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
 }
 
-private final class GmailCallback: @unchecked Sendable {
-  let listener: NWListener
-  let queue = DispatchQueue(label: "dev.ardia.gmail-oauth")
-  let state: String
-  private var result: Result<[String: String], Error>?
-  private var waiter: CheckedContinuation<[String: String], Error>?
-  private var connections: [NWConnection] = []
-  private var startup: CheckedContinuation<UInt16, Error>?
-  private var timeout: DispatchWorkItem?
-
-  init(state: String) throws {
-    self.state = state
-    let parameters = NWParameters.tcp
-    parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
-    listener = try NWListener(using: parameters)
-  }
-
-  func start() async throws -> UInt16 {
-    try await withCheckedThrowingContinuation { continuation in
-      queue.async { [self] in
-        self.startup = continuation
-        self.listener.stateUpdateHandler = { status in
-          guard let startup = self.startup else { return }
-          switch status {
-          case .ready:
-            self.startup = nil
-            startup.resume(returning: self.listener.port!.rawValue)
-          case .failed(_), .cancelled:
-            self.startup = nil
-            startup.resume(throwing: gmailError("Couldn’t start the local Google sign-in callback."))
-          default: break
-          }
-        }
-        self.listener.newConnectionHandler = { connection in
-          guard self.connections.count < 8 else { connection.cancel(); return }
-          self.connections.append(connection)
-          connection.stateUpdateHandler = { [weak self, weak connection] state in
-            guard let connection else { return }
-            switch state {
-            case .cancelled, .failed(_): self?.connections.removeAll { $0 === connection }
-            default: break
-            }
-          }
-          self.queue.asyncAfter(deadline: .now() + 10) { [weak connection] in connection?.cancel() }
-          connection.start(queue: self.queue)
-          self.receive(connection, buffer: Data())
-        }
-        self.listener.start(queue: self.queue)
-        let deadline = DispatchWorkItem { self.finish(.failure(gmailError("Google sign-in timed out. Try again."))) }
-        self.timeout = deadline
-        self.queue.asyncAfter(deadline: .now() + 180, execute: deadline)
-        self.queue.asyncAfter(deadline: .now() + 10) {
-          if self.startup != nil { self.finish(.failure(gmailError("Couldn’t start the local sign-in callback in time."))) }
-        }
-      }
-    }
-  }
-
-  func wait() async throws -> [String: String] {
-    try await withCheckedThrowingContinuation { continuation in
-      queue.async {
-        if let result = self.result { continuation.resume(with: result) }
-        else if self.waiter != nil { continuation.resume(throwing: gmailError("Google sign-in is already being completed.")) }
-        else { self.waiter = continuation }
-      }
-    }
-  }
-
-  func cancel() {
-    queue.async { self.finish(.failure(gmailError("Google sign-in was cancelled."))) }
-  }
-
-  private func receive(_ connection: NWConnection, buffer: Data) {
-    connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, ended, error in
-      var bytes = buffer
-      bytes.append(data ?? Data())
-      guard bytes.count <= 16384 else { connection.cancel(); return }
-      if let raw = String(data: bytes, encoding: .utf8), raw.contains("\r\n\r\n") {
-        let line = raw.components(separatedBy: "\r\n")[0].split(separator: " ")
-        guard line.count == 3, line[0] == "GET", let url = URLComponents(string: "http://127.0.0.1\(line[1])"), url.path == "/auth/callback" else { self.reply(connection, ok: false); return }
-        let pairs = url.queryItems ?? []
-        guard Set(pairs.map(\.name)).count == pairs.count else { self.reply(connection, ok: false); return }
-        let fields = Dictionary(uniqueKeysWithValues: pairs.map { ($0.name, $0.value ?? "") })
-        guard fields["state"] == self.state else { self.reply(connection, ok: false); return }
-        self.reply(connection, ok: true)
-        self.finish(.success(fields), keeping: connection)
-      } else if ended || error != nil {
-        connection.cancel()
-      } else {
-        self.receive(connection, buffer: bytes)
-      }
-    }
-  }
-
-  private func reply(_ connection: NWConnection, ok: Bool) {
-    let body = ok ? "Sign-in received. You can close this tab and return to Ardia Settings." : "Invalid sign-in callback. Return to Ardia Settings and try again."
-    let status = ok ? "200 OK" : "400 Bad Request"
-    let bytes = Data("HTTP/1.1 \(status)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n\(body)".utf8)
-    connection.send(content: bytes, completion: .contentProcessed { _ in connection.cancel() })
-  }
-
-  private func finish(_ value: Result<[String: String], Error>, keeping: NWConnection? = nil) {
-    guard result == nil else { return }
-    result = value
-    startup?.resume(throwing: gmailError("Google sign-in callback was cancelled or timed out."))
-    startup = nil
-    timeout?.cancel()
-    timeout = nil
-    listener.stateUpdateHandler = nil
-    listener.newConnectionHandler = nil
-    listener.cancel()
-    for connection in connections where connection !== keeping { connection.cancel() }
-    connections.removeAll()
-    waiter?.resume(with: value)
-    waiter = nil
-  }
-}
+private typealias GmailCallback = OAuthLoopbackCallback
 
 private func gmailClientSecret(_ stored: String?, bundled: Any? = Bundle.main.object(forInfoDictionaryKey: "ArdiaGoogleOAuthClientSecret")) -> String? {
   for candidate in [stored, bundled as? String] {
@@ -260,7 +144,7 @@ private actor GmailProvider {
     let generation = revision
     let state = try random()
     let verifier = try random()
-    let listener = try GmailCallback(state: state)
+    let listener = try GmailCallback(state: state, service: "Google")
     callback = listener
     defer { if revision == generation { callback = nil }; listener.cancel() }
     let port = try await listener.start()
