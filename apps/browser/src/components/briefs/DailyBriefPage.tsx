@@ -17,17 +17,11 @@ function SectionTitle({ children }: { children: string }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
-export function DailyBriefPage({ date, onConfigure, content: generatedContent, loading = false, error, onGenerate }: Props) {
+export function DailyBriefPage({ date, onConfigure, content, loading = false, error, onGenerate }: Props) {
   const windowId = useWindowId();
   const registerScroll = useCallback((view: ScrollView | null) => { if (__DEV__) registerBriefView(windowId, view); }, [windowId]);
   const [width, setWidth] = useState(1100);
-  const [preview, setPreview] = useState(false);
-  const [previewWeekday, setPreviewWeekday] = useState<number | null>(null);
-  const content = preview ? null : generatedContent;
-  const [done, setDone] = useState(false);
-  const [prep, setPrep] = useState(false);
   const day = briefDate(date);
-  if (preview && previewWeekday !== null) day.setDate(day.getDate() - day.getDay() + previewWeekday);
   const artwork = briefArtworkForDate(localBriefDate(day));
   const wide = width >= 720;
   const rails = width >= 380;
@@ -47,23 +41,14 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
   const configure = () => onConfigure?.();
   const summary = content ? briefSummary(content.summary) : undefined;
 
-  const updates: Array<BriefContent["updates"][number] & { project?: string }> = content ? content.updates : preview ? [
-            { title: "Maintainer took over your PDF links security fix", body: "juliusmarminge self-assigned PR #18239 and is finishing the implementation against current main. Your contribution is being shipped.", project: "T3 Code" },
-            { title: "Three PRs merged in two days", body: "hardbeat920 merged sidebar swipe navigation, Android header pill fix, and Android composer repair. Commented ‘this is great! thank you.’", project: "Monocode" },
-          ] : [];
+  const updates = content?.updates ?? [];
 
   return (
     <ScrollView ref={registerScroll} style={styles.root} contentContainerStyle={styles.scroll} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} testID="daily-brief-page">
       <View style={{ width, alignSelf: "center" }}>
         <View style={[styles.masthead, { width: contentWidth, alignSelf: "center" }]}>
           <Image source={require("../../../assets/briefs/ardia-mark.png")} style={styles.mastheadLogo} resizeMode="contain" accessibilityLabel="Ardia" />
-          <Pressable accessibilityRole="button" onPress={() => setPreview(!preview)} style={styles.previewButton}>
-            <Text style={styles.previewLabel}>{preview ? "Sample brief · Exit preview" : "Preview design"}</Text>
-          </Pressable>
         </View>
-        {preview && <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 5, marginBottom: 14 }}>
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, index) => <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Preview ${label}`} accessibilityState={{ selected: day.getDay() === index }} onPress={() => setPreviewWeekday(index)} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: day.getDay() === index ? "#ffe500" : "#232321" }}><Text style={{ fontSize: 12, color: day.getDay() === index ? "#101010" : "#cccac4" }}>{label}</Text></Pressable>)}
-        </View>}
         <View style={{ width, height: heroHeight, justifyContent: "center", alignItems: "center" }}>
           <View style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, overflow: "hidden" }}><Image source={artwork.source} style={{ position: "absolute", top: (heroHeight - artworkHeight) / 2, left: (contentWidth - artworkWidth) / 2, width: artworkWidth, height: artworkHeight }} resizeMode="cover" accessibilityLabel={`${artwork.title} by ${artwork.artist}`} /></View>
           <View pointerEvents="none" style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, backgroundColor: "rgba(0,0,0,0.09)" }} />
@@ -71,15 +56,15 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroTitle, { fontSize: titleSize, lineHeight: titleSize * 1.2, width: contentWidth * 0.98 }]}>{weekday} Brief</Text>
           {rails && <>
             <BriefRail text={dateLabel} fontSize={railFontSize} style={{ position: "absolute", top: 0, left: railInset, width: railWidth, height: heroHeight }} />
-            <BriefRail text={preview ? "09:52 AM" : "A fresh perspective"} clockwise fontSize={railFontSize} style={{ position: "absolute", top: 0, right: railInset, width: railWidth, height: heroHeight }} />
+            <BriefRail text="A fresh perspective" clockwise fontSize={railFontSize} style={{ position: "absolute", top: 0, right: railInset, width: railWidth, height: heroHeight }} />
           </>}
         </View>
         <View style={{ width: contentWidth, alignSelf: "center" }}>
         <View style={styles.captionRow}>
-          <Text style={styles.caption}>{summary ?? (preview ? "Nothing until a quick 15-minute call at noon. The morning is all yours." : "A little perspective. A clearer day. A brief made for you.")}</Text>
+          <Text style={styles.caption}>{summary ?? "A little perspective. A clearer day. A brief made for you."}</Text>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.artCredit, { width: Math.min(contentWidth * 0.55, `${artwork.title}, ${artwork.artist}, ${artwork.year}`.length * 4.9) }]}>{artwork.title}, {artwork.artist}, {artwork.year}</Text>
         </View>
-        {onGenerate && !preview && <View style={styles.generateRow}><Pressable accessibilityRole="button" disabled={loading} onPress={onGenerate} style={({ pressed }) => [styles.generateButton, { opacity: loading || pressed ? 0.5 : 1 }]}><Text style={styles.setupButtonText}>{loading ? "Preparing your brief…" : content ? "Refresh brief →" : "Generate brief →"}</Text></Pressable></View>}
+        {onGenerate && <View style={styles.generateRow}><Pressable accessibilityRole="button" disabled={loading} onPress={onGenerate} style={({ pressed }) => [styles.generateButton, { opacity: loading || pressed ? 0.5 : 1 }]}><Text style={styles.setupButtonText}>{loading ? "Preparing your brief…" : content ? "Refresh brief →" : "Generate brief →"}</Text></Pressable></View>}
         {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         <View style={styles.featureWrap}>
         <View style={[styles.feature, { flexDirection: wide ? "row" : "column" }]}>
@@ -87,22 +72,19 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
             <SectionTitle>Push your work forward</SectionTitle>
           </View>
           <View style={styles.rightColumn}>
-            <Text style={styles.itemTitle}>{content?.focus.title ?? (preview ? "Prepare for the iPad support review" : "Your day, brought together")}</Text>
-            <Text style={styles.body}>{content?.focus.body ?? (preview ? "CodeRabbit is processing your 20-file iPad PR right now. In its last two monocode reviews, it flagged the Android SegmentedSwitch progress prop handling. Your iPad PR adds five new workspace sizing and layout components with a similar pattern. I can help you pre-address those files or draft fixes once the review lands." : "Choose a provider and connect the sources you want to include. Your brief will bring together the work that needs your attention, the updates worth knowing, and the shape of your day.")}</Text>
-            {!preview && !content && <Pressable accessibilityRole="button" onPress={configure} style={styles.setupButton}><Text style={styles.setupButtonText}>Set up daily briefs →</Text></Pressable>}
+            <Text style={styles.itemTitle}>{content?.focus.title ?? "Your day, brought together"}</Text>
+            <Text style={styles.body}>{content?.focus.body ?? "Choose a provider and connect the sources you want to include. Your brief will bring together the work that needs your attention, the updates worth knowing, and the shape of your day."}</Text>
+            {!content && <Pressable accessibilityRole="button" onPress={configure} style={styles.setupButton}><Text style={styles.setupButtonText}>Set up daily briefs →</Text></Pressable>}
           </View>
         </View>
         <View style={{ position: "absolute", left: 21, bottom: -26, zIndex: 20 }}>
-          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content ? focusDisplayLinks(content.focus) : undefined} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? undefined : configure} />
+          <BriefBadge title={content ? "Let's\ndo it →" : "Make it\nyours →"} links={content ? focusDisplayLinks(content.focus) : undefined} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content ? undefined : configure} />
         </View>
         </View>
         <View style={[styles.section, { flexDirection: wide ? "row" : "column" }]}>
           <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Top to-dos</SectionTitle></View>
           <View style={styles.rightColumn}>
-            {content ? <TodoItems items={content.todos} /> : preview ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: done }} onPress={() => setDone(!done)} style={styles.todo}>
-              <View style={[styles.checkbox, !wide && { position: "relative", left: 0, marginRight: 14 }, done && { backgroundColor: "#ffe500", borderColor: "#ffe500" }]}>{done && <Text style={styles.checkmark}>✓</Text>}</View>
-              <View style={{ flex: 1 }}><Text style={[styles.itemTitle, done && { textDecorationLine: "line-through", color: "#77756e" }]}>Fix CI failures on mobile-file-tagging branch</Text><Text style={styles.body}>Two CI workflow runs failed today on your feat/mobile-file-tagging branch. Check the run logs for failure details so you can unblock the feature.</Text></View>
-            </Pressable> : <><Text style={styles.itemTitle}>Room for what matters</Text><Text style={styles.body}>Action items from your connected sources will appear here. Nothing is read until you give permission.</Text></>}
+            {content ? <TodoItems items={content.todos} /> : <><Text style={styles.itemTitle}>Room for what matters</Text><Text style={styles.body}>Action items from your connected sources will appear here. Nothing is read until you give permission.</Text></>}
           </View>
         </View>
         <View style={[styles.section, { marginTop: 62 }]}>
@@ -110,21 +92,20 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           {updates.map((item, index) => <View key={index} style={{ flexDirection: "row", marginTop: index === 0 ? 28 : 34 }}>
             <View style={wide ? styles.leftColumn : { width: 35 }}><Text style={[styles.number, { marginTop: 2 }]}>{String(index + 1).padStart(2, "0")}</Text></View>
             <View style={styles.rightColumn}>
-              <Text style={styles.itemTitle}>{item.title}{(item.source?.project || item.project) ? <Text style={styles.project}>  {item.source?.project ?? item.project}</Text> : null}</Text>
+              <Text style={styles.itemTitle}>{item.title}{item.source?.project ? <Text style={styles.project}>  {item.source.project}</Text> : null}</Text>
               <Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text>
             </View>
           </View>)}
           {content && !content.updates.length && <Text style={[styles.body, { marginTop: 28 }]}>Nothing new needs your attention.</Text>}
-          {!content && !preview && <Text style={[styles.body, { marginTop: 28 }]}>The important updates from Gmail and GitHub will be gathered into one calm place.</Text>}
+          {!content && <Text style={[styles.body, { marginTop: 28 }]}>The important updates from Gmail and GitHub will be gathered into one calm place.</Text>}
         </View>
-        {(preview || !!content?.events.length) && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
-          <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{content ? content.events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.time}</Text><Text style={[styles.eventName, { flex: 1 }]}>{event.title}</Text></View>) : preview && <View style={styles.calendarEvent}><Text style={styles.eventTime}>12:15p</Text><Text style={styles.eventName}>Bachs Intro</Text></View>}</View>
-          <View style={styles.rightColumn}>{content ? content.events.length ? content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>) : <Text style={[styles.body, { marginTop: wide ? 48 : 0 }]}>No events to prepare for.</Text> : <><Text style={[styles.itemTitle, { marginTop: wide ? 48 : 0 }]}>{preview ? "Bachs Intro — 12:15 PM – 12:30 PM" : "Make space for your day"}</Text><Text style={styles.body}>{preview ? "15-minute introductory call via Google Meet." : "Connect your calendar to see your schedule and prepare for what’s next."}</Text>{preview && <View style={{ alignItems: "flex-end", marginTop: 28 }}><BriefBadge title="Prep me →" small onPress={() => setPrep(!prep)} /></View>}{prep && preview && <Text style={styles.actionDetail}>Before the call: review the invitation, write down your goals, and leave a few minutes to join.</Text>}</>}</View>
-        </View>
-        }
+        {!!content?.events.length && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
+          <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{content.events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.time}</Text><Text style={[styles.eventName, { flex: 1 }]}>{event.title}</Text></View>)}</View>
+          <View style={styles.rightColumn}>{content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>)}</View>
+        </View>}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <BriefFooterIcon service="github" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <BriefFooterIcon service="gmail" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <BriefFooterIcon service="calendar" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
-          <Text style={styles.footerSmall}>{preview && !content ? "Preview content · No accounts connected" : "Your sources, with your permission."}</Text>
+          <Text style={styles.footerSmall}>Your sources, with your permission.</Text>
         </View>
         </View>
       </View>
@@ -146,8 +127,6 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 20, paddingBottom: 50 },
   masthead: { height: 37, alignItems: "center", justifyContent: "flex-start" },
   mastheadLogo: { width: 26, height: 26 },
-  previewButton: { position: "absolute", right: 0, top: 1, paddingVertical: 5, paddingHorizontal: 8 },
-  previewLabel: { color: "#77756e", fontSize: 11 },
   heroThe: { color: "#ffe500", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "700", marginBottom: -4, transform: [{ translateY: 7 }] },
   heroTitle: { color: "#ffe500", fontFamily: "Georgia", fontWeight: "700", textAlign: "center", letterSpacing: -4 },
   captionRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 10, gap: 20 },
@@ -162,8 +141,6 @@ const styles = StyleSheet.create({
   body: { color: "#969187", fontSize: 15, lineHeight: 28, marginTop: 7 },
   section: { marginHorizontal: 22, marginTop: 64 },
   stackedTitle: { marginBottom: 20 },
-  todo: { flexDirection: "row" },
-  checkbox: { width: 17, height: 17, borderRadius: 9, borderColor: "#53534f", borderWidth: 1, position: "absolute", left: -65, top: 3, justifyContent: "center", alignItems: "center" },
   checkmark: { fontSize: 12, color: "#101010" },
   number: { color: "#4a4843", fontFamily: "Georgia", fontSize: 13, marginTop: 24 },
   project: { color: "#757168", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "400", fontSize: 14 },
@@ -176,7 +153,6 @@ const styles = StyleSheet.create({
   footerSmall: { color: "#65625b", fontFamily: "Georgia", fontSize: 13 },
   setupButton: { alignSelf: "flex-start", marginTop: 20, borderBottomWidth: 1, borderBottomColor: "#ffe500", paddingBottom: 3 },
   setupButtonText: { color: "#ffe500", fontSize: 14 },
-  actionDetail: { color: "#d0c9b5", fontSize: 14, lineHeight: 24, marginTop: 18 },
   generateRow: { alignItems: "flex-end", marginTop: 18, marginBottom: -22 },
   generateButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: "#484530" },
   error: { color: "#e6a296", fontSize: 13, lineHeight: 21, marginTop: 30 },

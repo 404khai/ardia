@@ -1,6 +1,6 @@
-import { briefProviderStatus, cancelChatGPTSignIn, cancelGmailCollection, cancelGmailSignIn, connectChatGPT, connectGmail, disconnectChatGPT, disconnectGmail, gmailStatus, setGmailClientSecret, type BriefProviderStatus, type GmailStatus } from "@ardia/shell";
+import { briefProviderStatus, cancelChatGPTSignIn, cancelGmailCollection, cancelGmailSignIn, connectChatGPT, connectGmail, disconnectChatGPT, disconnectGmail, gmailStatus, type BriefProviderStatus, type GmailStatus } from "@ardia/shell";
 import { useEffect, useRef, useState } from "react";
-import { Clipboard, Linking, Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { focus } from "../../../lib/actions";
 import { openDailyBrief } from "../../../lib/dailyBriefs";
 import { useTheme } from "../../../lib/theme";
@@ -204,8 +204,6 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
   const [allowed, setAllowed] = useState(saved);
   const [busy, setBusy] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [clientSecret, setClientSecret] = useState("");
-  const [editClientSecret, setEditClientSecret] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef(true);
   const revision = useRef(0);
@@ -227,11 +225,6 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
     setBusy(true);
     setError(null);
     try {
-      if (clientSecret.trim()) {
-        await setGmailClientSecret(clientSecret.trim());
-        setClientSecret("");
-        setEditClientSecret(false);
-      }
       const value = await connectGmail();
       if (!active.current) return;
       setStatus(value);
@@ -275,18 +268,13 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
     <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 12 }}>Gmail for your daily brief</Text>
     <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 14 }}>{SOURCE_DETAILS.gmail}</Text>
     {status?.connected ? <Text style={{ fontSize: 12, color: theme.textPrimary, marginBottom: 14 }}>Connected as {status.email || "your Google account"}</Text> : <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 14 }}>Sign in with the Gmail account you want to use. It does not need a separate Ardia browser profile.</Text>}
-    {!status?.connected && (!status?.clientSecretConfigured || editClientSecret) && <View style={{ marginBottom: 16, gap: 8 }}>
-      <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary }}>Google requires this Desktop app’s client secret. Copy it from Google Cloud → Google Auth Platform → Clients → your Desktop app. Enter it here once; Ardia saves it in macOS Keychain. Keep it out of chat.</Text>
-      <TextField value={clientSecret} onChangeText={setClientSecret} secure placeholder="Desktop app client secret" />
-      <View style={{ alignItems: "flex-start" }}><Button title="Paste Client Secret" disabled={busy} onPress={() => void Clipboard.getString().then((value) => { if (value.trim()) { setClientSecret(value.trim()); setError(null); } else setError("The clipboard is empty."); }).catch(() => setError("Could not read the clipboard."))} /></View>
-    </View>}
-    {!status?.connected && status?.clientSecretConfigured && !editClientSecret && <View style={{ alignItems: "flex-start", marginBottom: 14 }}><Button title="Replace Client Secret…" disabled={busy} onPress={() => setEditClientSecret(true)} /></View>}
+    {!status?.connected && !status?.clientSecretConfigured && <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 14 }}>{status ? "Gmail sign-in is not available in this build yet." : "Checking Gmail sign-in availability…"}</Text>}
     <Checkbox value={allowed} disabled={busy || !status?.connected} onChange={setAllowed} label={`Allow Gmail content in briefs generated with ${provider}`} />
     <Text style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary, marginTop: 10 }}>This sends selected message senders, subjects, dates and snippets to {provider}. Changing providers clears this permission. Revoking permission stops future sharing; content already sent cannot be recalled.</Text>
     {error && <Text style={{ fontSize: 12, lineHeight: 17, color: "#E5534B", marginTop: 12 }}>{error}</Text>}
     <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
       <Button title={busy && !disconnecting ? "Cancel Sign-In" : "Cancel"} disabled={disconnecting} onPress={closeSettingsSheet} />
-      {status?.connected ? <><Button title="Disconnect" disabled={busy} onPress={() => void disconnect()} /><Button title="Save Permission" kind="primary" disabled={busy} onPress={save} /></> : <Button title={busy ? "Waiting for Google…" : "Continue with Google…"} kind="primary" disabled={busy || ((!status?.clientSecretConfigured || editClientSecret) && !clientSecret.trim())} onPress={() => void connect()} />}
+      {status?.connected ? <><Button title="Disconnect" disabled={busy} onPress={() => void disconnect()} /><Button title="Save Permission" kind="primary" disabled={busy} onPress={save} /></> : <Button title={busy ? "Waiting for Google…" : "Continue with Google…"} kind="primary" disabled={busy || !status?.clientSecretConfigured} onPress={() => void connect()} />}
     </View>
   </Sheet>;
 }

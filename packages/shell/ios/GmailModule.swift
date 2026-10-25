@@ -34,9 +34,9 @@ private func gmailRequestError(_ status: Int, data: Data, stage: String) -> Gmai
   let code = rawCode.count <= 64 && rawCode.allSatisfy({ "abcdefghijklmnopqrstuvwxyz0123456789_".contains($0) }) ? rawCode : ""
   let description = body["error_description"] as? String ?? ""
   if code == "invalid_request", description.contains("client_secret") {
-    return gmailError("Google requires this Desktop app’s client secret. Enter it in the Gmail connection sheet and sign in again.")
+    return gmailError("Gmail sign-in needs updated app configuration. Please update Ardia and try again.")
   }
-  if code == "invalid_client" { return gmailError("Google did not accept the Desktop app client secret. Replace it in the Gmail connection sheet and sign in again.") }
+  if code == "invalid_client" { return gmailError("Google did not accept this build’s Gmail configuration. Please update Ardia and try again.") }
   if code == "invalid_grant" { return gmailError("Google’s authorization code expired or was already used. Start Gmail sign-in again.") }
   if code == "redirect_uri_mismatch" { return gmailError("Google did not accept Ardia’s local callback. Check that this OAuth client is a Desktop app.") }
   let apiError = body["error"] as? [String: Any] ?? [:]
@@ -216,6 +216,14 @@ private final class GmailCallback: @unchecked Sendable {
   }
 }
 
+private func gmailClientSecret(_ stored: String?, bundled: Any? = Bundle.main.object(forInfoDictionaryKey: "ArdiaGoogleOAuthClientSecret")) -> String? {
+  for candidate in [stored, bundled as? String] {
+    guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value.count <= 4096, !value.contains(where: { $0.isWhitespace }), !value.contains("$("), !value.contains("${") else { continue }
+    return value
+  }
+  return nil
+}
+
 private actor GmailProvider {
   private let clientId = "440343742504-72o24jd3qds5hbfhivj4rg1m7fksa3la.apps.googleusercontent.com"
   private let scope = "https://www.googleapis.com/auth/gmail.readonly"
@@ -248,7 +256,7 @@ private actor GmailProvider {
   func connect() async throws -> [String: Any] {
     invalidate()
     let store = try GmailSecrets.load()
-    guard store.clientSecret != nil else { throw gmailError("Google requires this Desktop app’s client secret. Enter it in the Gmail connection sheet before signing in.") }
+    guard gmailClientSecret(store.clientSecret) != nil else { throw gmailError("Gmail sign-in is not available in this build yet.") }
     let generation = revision
     let state = try random()
     let verifier = try random()
@@ -269,7 +277,7 @@ private actor GmailProvider {
     guard fields["error"] == nil else { throw gmailError("Google sign-in was not approved.") }
     guard let code = fields["code"], !code.isEmpty, code.count <= 4096 else { throw gmailError("Google did not return a valid authorization code.") }
     var parameters = ["client_id": clientId, "code": code, "code_verifier": verifier, "grant_type": "authorization_code", "redirect_uri": redirect]
-    if let secret = store.clientSecret { parameters["client_secret"] = secret }
+    if let secret = gmailClientSecret(store.clientSecret) { parameters["client_secret"] = secret }
     let tokens = try await post("https://oauth2.googleapis.com/token", parameters, generation: generation)
     try check(generation)
     var credential = try credentialOf(tokens, previous: nil)
@@ -341,7 +349,7 @@ private actor GmailProvider {
     try check(generation)
     let store = try GmailSecrets.load()
     var fields = ["client_id": clientId, "refresh_token": credential.refreshToken, "grant_type": "refresh_token"]
-    if let secret = store.clientSecret { fields["client_secret"] = secret }
+    if let secret = gmailClientSecret(store.clientSecret) { fields["client_secret"] = secret }
     let json = try await post("https://oauth2.googleapis.com/token", fields, generation: generation, collection: true)
     try check(generation)
     let refreshed = try credentialOf(json, previous: credential)
@@ -359,7 +367,7 @@ private actor GmailProvider {
   }
 
   private func statusOf(_ store: GmailStore) -> [String: Any] {
-    ["connected": store.credential?.scopes.contains(scope) == true, "email": store.credential?.email ?? "", "clientSecretConfigured": store.clientSecret != nil]
+    ["connected": store.credential?.scopes.contains(scope) == true, "email": store.credential?.email ?? "", "clientSecretConfigured": gmailClientSecret(store.clientSecret) != nil]
   }
 
   private func invalidate() {

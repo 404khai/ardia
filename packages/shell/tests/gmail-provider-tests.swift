@@ -20,12 +20,19 @@ actor GmailRefreshFixture {
 @main
 struct GmailTests {
   static func main() async throws {
+    precondition(gmailClientSecret(nil, bundled: "bundle-value") == "bundle-value")
+    precondition(gmailClientSecret("stored-value", bundled: "bundle-value") == "stored-value")
+    for invalid: Any in ["", "$(ARDIA_GOOGLE_OAUTH_CLIENT_SECRET)", "${ARDIA_GOOGLE_OAUTH_CLIENT_SECRET}", "bad value", String(repeating: "x", count: 4097), 42] {
+      precondition(gmailClientSecret(nil, bundled: invalid) == nil)
+    }
+    let unconfigured = GmailProvider()
+    do { _ = try await unconfigured.connect(); preconditionFailure("Unconfigured Gmail opened sign-in") } catch { precondition(String(describing: error).contains("not available")) }
     let provider = GmailProvider()
     let missingSecret = Data(#"{"error":"invalid_request","error_description":"client_secret is missing."}"#.utf8)
-    precondition(gmailRequestError(400, data: missingSecret, stage: "the Gmail token exchange").message.contains("client secret"))
+    precondition(gmailRequestError(400, data: missingSecret, stage: "the Gmail token exchange").message.contains("configuration"))
     let invalidSecret = Data(#"{"error":"invalid_client","error_description":"secret-token-must-not-appear"}"#.utf8)
     let invalidMessage = gmailRequestError(401, data: invalidSecret, stage: "the Gmail token exchange").message
-    precondition(invalidMessage.contains("client secret") && !invalidMessage.contains("secret-token-must-not-appear"))
+    precondition(invalidMessage.contains("configuration") && !invalidMessage.contains("secret-token-must-not-appear"))
     let expiredCode = Data(#"{"error":"invalid_grant","error_description":"code-must-not-appear"}"#.utf8)
     let expiredMessage = gmailRequestError(400, data: expiredCode, stage: "the Gmail token exchange").message
     precondition(expiredMessage.contains("expired") && !expiredMessage.contains("code-must-not-appear"))

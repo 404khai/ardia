@@ -394,7 +394,7 @@ const ROWS: Record<SettingsPane, Section[]> = {
         enabled: { title: "Open a daily brief", description: "Opens a brief tab in the background while Ardia is running. Connect a provider to generate its content.", keywords: ["morning", "daily", "schedule"] },
         delivery: { title: "Delivery", keywords: ["schedule", "startup", "time"] },
         time: { title: "Local time", description: "If Ardia is closed, your brief opens the next time you launch it after this time.", keywords: ["morning", "schedule", "timezone"] },
-        open: { title: "Today's brief", description: "Open the page and preview its design.", keywords: ["preview", "daily brief"] },
+        open: { title: "Today's brief", description: "Open today’s daily brief.", keywords: ["daily brief"] },
       },
     },
     {

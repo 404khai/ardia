@@ -1,13 +1,13 @@
 import { copyText, focusWindow } from "@ardia/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Clipboard, Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../lib/theme";
 import { deleteLiveFolder, manualRefresh, statusText } from "../../../live/engine";
 import { connectGoogleDrive } from "../../../live/googleAuth";
 import { isMocked } from "../../../live/net";
-import { connectBitbucket, connectConfluence, connectGithub, connectNotion, disconnect, SOURCES, startGithubDeviceFlow, type DeviceFlow } from "../../../live/sources";
-import { DEFAULT_CONFIG, live, updateConfig, updateFolder, useLive } from "../../../live/store";
+import { connectBitbucket, connectConfluence, connectNotion, disconnect, SOURCES, startGithubDeviceFlow, type DeviceFlow } from "../../../live/sources";
+import { DEFAULT_CONFIG, live, updateFolder, useLive } from "../../../live/store";
 import type { LiveAccount, LiveFolder, LiveSourceId } from "../../../live/types";
 import { useBrowser } from "../../../store/browser";
 import { Favicon } from "../../primitives";
@@ -123,13 +123,6 @@ function browserWindow(): string | null {
   return s.ui.focusOrder.find((id) => s.windows[id] && !s.windows[id]!.incognito) ?? s.windowOrder.find((id) => !s.windows[id]!.incognito) ?? null;
 }
 
-function openInBrowser(url: string) {
-  const windowId = browserWindow();
-  if (!windowId) return;
-  useBrowser.getState().newTab(windowId, { url });
-  void focusWindow(windowId);
-}
-
 export function ConnectSheet({ id }: { id: LiveSourceId }) {
   const theme = useTheme();
   const source = SOURCES[id];
@@ -200,66 +193,52 @@ function Actions({ children }: { children: ReactNode }) {
 
 function GithubConnect({ busy, run }: ConnectProps) {
   const theme = useTheme();
-  const [token, setToken] = useState("");
-  const [clientId, setClientId] = useState(DEFAULT_CONFIG.githubClientId);
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
-  const [showToken, setShowToken] = useState(false);
-  const [pasteError, setPasteError] = useState<string | null>(null);
   const alive = useRef(true);
   const activeFlow = useRef<DeviceFlow | null>(null);
   const began = useRef(false);
   useEffect(() => () => { alive.current = false; activeFlow.current?.cancel(); }, []);
 
-  const signIn = (id = clientId) =>
-    run(async () => {
-      updateConfig({ githubClientId: id.trim() });
-      const f = await startGithubDeviceFlow(id.trim());
-      if (!alive.current) { f.cancel(); return; }
-      activeFlow.current = f;
-      setFlow(f);
-      copyText(f.userCode);
-      openInBrowser(f.verificationUri);
+  const signIn = () => run(async () => {
+    const f = await startGithubDeviceFlow(DEFAULT_CONFIG.githubClientId);
+    void f.done.catch(() => {});
+    if (!alive.current) { f.cancel(); return; }
+    activeFlow.current = f;
+    setFlow(f);
+    copyText(f.userCode);
+    try {
+      await Linking.openURL(f.verificationUri);
       await f.done;
-    });
+    } finally {
+      f.cancel();
+      if (activeFlow.current === f) activeFlow.current = null;
+      if (alive.current) setFlow(null);
+    }
+  });
 
   useEffect(() => {
-    if (began.current || !clientId.trim()) return;
+    if (began.current) return;
     began.current = true;
-    void signIn(clientId);
+    void signIn();
   }, []);
 
   if (flow) {
-    return (
-      <View>
-        <Help>Enter this code on GitHub (it's on your clipboard), then review and approve Ardia's permissions. This sheet closes when you're signed in.</Help>
-        <Text selectable style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: "Menlo", color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}>
-          {flow.userCode}
-        </Text>
-        <Actions>
-          <Button title="Cancel" onPress={() => (flow.cancel(), setFlow(null))} />
-          <Button title="Open GitHub" kind="primary" onPress={() => openInBrowser(flow.verificationUri)} />
-        </Actions>
-      </View>
-    );
-  }
-  return (
-    <View>
-      <Help>GitHub will ask you to authorize Ardia for repo and read:org access. Your account connection is stored in macOS Keychain.</Help>
-      {!clientId.trim() ? <Help>Ardia needs its public GitHub OAuth app client ID to open the permission screen. Register an OAuth app with Device Flow enabled, then enter its client ID here once.</Help> : null}
-      <Field label="GitHub OAuth app client ID">
-        <TextField value={clientId} onChangeText={setClientId} placeholder="Iv1.…" />
-      </Field>
-      {pasteError && <Help>{pasteError}</Help>}
+    return <View>
+      <Help>Enter this code on GitHub (it's on your clipboard), then review and approve Ardia's permissions. This sheet closes when you're signed in.</Help>
+      <Text selectable style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: "Menlo", color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}>{flow.userCode}</Text>
       <Actions>
-        <Button title="Paste Client ID" disabled={busy} onPress={() => void Clipboard.getString().then((value) => { if (value.trim()) { setClientId(value.trim()); setPasteError(null); } else setPasteError("The clipboard is empty."); }).catch(() => setPasteError("Could not read the clipboard."))} />
-        <Button title="Cancel" onPress={closeSettingsSheet} />
-        <Button title={busy ? "Connecting…" : "Continue with GitHub…"} kind="primary" disabled={!clientId.trim() || busy} onPress={() => void signIn()} />
+        <Button title="Cancel" onPress={() => { flow.cancel(); closeSettingsSheet(); }} />
+        <Button title="Open GitHub" kind="primary" onPress={() => void Linking.openURL(flow.verificationUri).catch(() => {})} />
       </Actions>
-      <View style={{ height: 1, backgroundColor: theme.divider, marginVertical: 14 }} />
-      <Button title={showToken ? "Hide token option" : "Use a personal access token instead"} onPress={() => setShowToken(!showToken)} />
-      {showToken ? <View style={{ marginTop: 12 }}><Field label="Personal access token"><TextField value={token} onChangeText={setToken} placeholder="ghp_…" secure onSubmit={() => token && void run(() => connectGithub(token))} /></Field><Actions><Button title={busy ? "Checking…" : "Connect Token"} disabled={!token.trim() || busy} onPress={() => void run(() => connectGithub(token))} /></Actions></View> : null}
-    </View>
-  );
+    </View>;
+  }
+  return <View>
+    <Help>GitHub will ask you to authorize Ardia for repo and read:org access. Your account connection is stored in macOS Keychain.</Help>
+    <Actions>
+      <Button title="Cancel" onPress={closeSettingsSheet} />
+      <Button title={busy ? "Opening GitHub…" : "Continue with GitHub…"} kind="primary" disabled={busy} onPress={() => void signIn()} />
+    </Actions>
+  </View>;
 }
 
 function BitbucketConnect({ busy, run }: ConnectProps) {

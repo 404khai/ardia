@@ -12,6 +12,7 @@ const validLink = (link: BriefLink) => isSafeBriefSource({ kind: linkKind(link),
 export function BriefBadge({ title, onPress, small = false, links = [], maxWidth = 330 }: Props) {
   const size = small ? 84 : 108;
   const face = size * 0.76;
+  const popupWidth = Math.max(160, Math.min(330, maxWidth));
   const hasArrow = /→\s*$/.test(title);
   const labelLines = title.replace(/\s*→\s*$/, "").split("\n");
   const finalLine = labelLines.pop() ?? "";
@@ -65,7 +66,7 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
           </View>
         </Animated.View>
       </Pressable>
-      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: -8, width: Math.max(160, Math.min(330, maxWidth)), padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
+      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: (size - popupWidth) / 2, width: popupWidth, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
         <Text style={{ color: "#eeeeeb", fontFamily: "Georgia", fontSize: 16 }}>Sources for this recommendation</Text>
         <Text style={{ color: "#bbb7b0", fontSize: 13, lineHeight: 19 }}>{references.length ? "Open the sources behind this recommendation." : "Refresh this brief to load its source links."}</Text>
         {references.map((link) => {
