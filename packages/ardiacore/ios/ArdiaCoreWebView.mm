@@ -241,6 +241,7 @@ NSString *gSearchEngineName = @"Google";
 BOOL gDisplayMediaPicker = NO;
 NSString *gPeekModifier = @"shift";
 NSString *gSplitLinkModifier = @"altShift";
+static BOOL gSelectionPopover = YES;
 static const NSEventModifierFlags kPeekKeyMask = NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagCommand | NSEventModifierFlagControl;
 static NSEventModifierFlags gPeekUpKeys = 0;
 static CFTimeInterval gPeekUpAt = -1;
@@ -560,6 +561,7 @@ static void AnswerHello(ArdiaCoreTab *tab, NSString *profile, NSDictionary *hell
     if (gDisplayMediaPicker && [ArdiaCoreEngine respondsToSelector:@selector(allowDesktopCapture:tab:frame:origin:audio:)])
       config[@"displayMediaPicker"] = @YES;
     if (main && ACFieldTimingEnabled()) config[@"fieldTiming"] = @YES;
+    if (main) config[@"selectionPopover"] = @(gSelectionPopover);
     config[@"peek"] = gPeekModifier;
     config[@"split"] = SplitLinkModifier();
     if (PeekTracing()) config[@"peekTrace"] = @YES;
@@ -790,6 +792,10 @@ static BOOL HeldSelector(SEL selector) {
   NSUInteger _leaveGeneration;
   BOOL _handingOff;
   BOOL _revealed;
+  BOOL _littlePageHeld;
+  BOOL _littlePageSettled;
+  float _littlePageOpacity;
+  NSUInteger _littlePageGeneration;
   NSUInteger _revealGeneration;
   __weak NSView *_loweredPane;
   CGFloat _loweredPaneZ;
@@ -1307,6 +1313,7 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
 
 - (void)attach:(ArdiaCoreTab *)tab {
   if (TraceVisibility()) NSLog(@"[ardiacore-vis] %@ attach tab=%d visible=%d", _transferKey, (int)tab.tabId, _visible);
+  const BOOL shownEarly = [ArdiaCoreEarlyWindow holdsPage:tab];
   [LiveViews() addObject:self];
   InstallControlPressMonitor();
   _tab = tab;
@@ -1314,6 +1321,7 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
   [ArdiaCoreTabs setView:self forTab:tab];
   [self markTemporary];
   [self pushPeekModifier];
+  [self pushSelectionPopover];
   [self bindRestoreKey];
   [self takePageReports];
   if ([tab respondsToSelector:@selector(deliverHeldPageMessages)]) [tab deliverHeldPageMessages];
@@ -1328,6 +1336,7 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
   if (NSView *devtools = tab.devToolsView) [self devToolsChanged:devtools];
   [self layoutPage];
   [self applyPainting];
+  if (!shownEarly && (_creatingURL.length || tab.loading)) [self holdLittlePage];
   if (_muted && [tab respondsToSelector:@selector(setMuted:)]) tab.muted = YES;
   if (_pageBackgroundColor && [tab respondsToSelector:@selector(setPageBackgroundColor:)]) tab.pageBackgroundColor = _pageBackgroundColor;
   if (_contentsBackgroundColor && [tab respondsToSelector:@selector(setContentsBackgroundColor:)]) tab.contentsBackgroundColor = _contentsBackgroundColor;
@@ -1356,6 +1365,7 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
 - (void)detach {
   if (!_tab) return;
   if (TraceVisibility()) NSLog(@"[ardiacore-vis] %@ detach tab=%d", _transferKey, (int)_tab.tabId);
+  [self revealLittlePage:NO];
   if (_tab.delegate == self) _tab.delegate = nil;
   [ArdiaCoreTabs setView:nil forTab:_tab];
   [ArdiaCoreWebView noteShown:_tab];
@@ -1602,6 +1612,47 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
 + (void)repaintWarmPagesIn:(NSWindow *)window {
   for (ArdiaCoreWebView *view in LiveViews().allObjects)
     if (view->_warm && view.window == window) [view schedulePainting];
+}
+
+- (void)holdLittlePage {
+  NSView *page = _tab.view;
+  if (_littlePageHeld || _littlePageSettled || !page || page.superview != self ||
+      ![self.window.identifier isEqualToString:@"ardia.window.small"])
+    return;
+  _littlePageHeld = YES;
+  page.wantsLayer = YES;
+  _littlePageOpacity = page.layer.opacity;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  page.layer.opacity = 0;
+  [CATransaction commit];
+  [self callFrame:@"" kind:@"firstPaint" json:@"{}"];
+  const NSUInteger generation = ++_littlePageGeneration;
+  __weak ArdiaCoreWebView *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    ArdiaCoreWebView *view = weakSelf;
+    if (view && view->_littlePageGeneration == generation) [view revealLittlePage:YES];
+  });
+}
+
+- (void)revealLittlePage:(BOOL)animated {
+  if (!_littlePageHeld) return;
+  _littlePageHeld = NO;
+  _littlePageSettled = YES;
+  _littlePageGeneration++;
+  CALayer *layer = _tab.view.layer;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  layer.opacity = _littlePageOpacity;
+  if (animated) {
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @0;
+    fade.toValue = @(_littlePageOpacity);
+    fade.duration = 0.16;
+    fade.timingFunction = [CAMediaTimingFunction functionWithControlPoints:0.23 :1 :0.32 :1];
+    [layer addAnimation:fade forKey:@"ardia.little.page"];
+  }
+  [CATransaction commit];
 }
 
 - (void)applyPainting {
@@ -2066,6 +2117,12 @@ void ArdiaCoreWebViewsSetFieldTiming(BOOL on) {
   for (ArdiaCoreWebView *view in LiveViews().allObjects) [view pushPeekModifier];
 }
 
++ (void)setSelectionPopoverEnabled:(BOOL)enabled {
+  if (enabled == gSelectionPopover) return;
+  gSelectionPopover = enabled;
+  for (ArdiaCoreWebView *view in LiveViews().allObjects) [view pushSelectionPopover];
+}
+
 + (void)setAutoPictureInPictureEnabled:(BOOL)enabled {
   if ([ArdiaCoreEngine respondsToSelector:@selector(setAutoPictureInPicture:)]) [ArdiaCoreEngine setAutoPictureInPicture:enabled];
 }
@@ -2172,6 +2229,7 @@ void ArdiaCoreWebViewsSetFieldTiming(BOOL on) {
 }
 
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab {
+  if (!tab.loading && tab.url.length && ![tab.url hasPrefix:@"about:"]) [self revealLittlePage:YES];
   if (tab.loading) [self resetBlocked:YES];
   if (tab.loading) ACFieldMarkNow(_transferKey, @"start");
   [self queueNavigation];
@@ -2263,6 +2321,10 @@ void ArdiaCoreWebViewsSetFieldTiming(BOOL on) {
     [self noteScriptFrame:frameId main:main];
     [self callFrame:frameId kind:@"peekConfig" json:PeekConfigJSON()];
     AnswerHello(tab, _profile, dict, frameId, main);
+    if (main && _littlePageHeld) [self callFrame:frameId kind:@"firstPaint" json:@"{}"];
+  } else if ([kind isEqualToString:@"firstPaint"] && main) {
+    NSString *url = Text(dict, @"url", 8192);
+    if (url.length && ![url hasPrefix:@"about:"] && SamePage(url, tab.url)) [self revealLittlePage:YES];
   } else if ([kind isEqualToString:@"peek"] && dict) {
     [self peekLink:dict frame:frameId main:main];
   } else if ([kind isEqualToString:@"peekHello"]) {
@@ -2299,6 +2361,8 @@ void ArdiaCoreWebViewsSetFieldTiming(BOOL on) {
     NSString *state = Text(dict, @"state", 8);
     if ([@[ @"down", @"up", @"top" ] containsObject:state ?: @""])
       [self emit:@"pageMessage" payload:@{@"kind" : @"scroll", @"data" : @{@"state" : state}}];
+  } else if ([kind isEqualToString:@"drm"] && dict) {
+    [self emit:@"pageMessage" payload:@{@"kind" : @"drm", @"data" : @{@"keySystem" : Text(dict, @"keySystem", 64) ?: @"", @"main" : @(main)}}];
   } else if ([kind isEqualToString:@"nowPlaying"]) {
     if (!_nowPlaying) _nowPlaying = [NSMutableDictionary dictionary];
     if (dict) _nowPlaying[frameId] = NowPlayingState(dict);
@@ -2407,6 +2471,10 @@ static NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
 
 - (void)forgetScriptFrame:(NSString *)frameId {
   if (frameId.length) [ScriptFramesOf(_tab) removeObject:frameId];
+}
+
+- (void)pushSelectionPopover {
+  if (_tab) [self callFrame:@"" kind:@"selectionPopover" json:gSelectionPopover ? @"true" : @"false"];
 }
 
 - (void)pushPeekModifier {
@@ -2598,6 +2666,7 @@ static NSString *LinkKeyAction(NSString *key) {
 
 - (void)loadNow:(NSString *)url userInitiated:(BOOL)userInitiated {
   if ([self skipsNavigationDownload:url userInitiated:userInitiated]) return;
+  if (url.length && ![url hasPrefix:@"about:"]) [self holdLittlePage];
   ACFieldMarkNow(_transferKey, @"request");
   if ([_tab respondsToSelector:@selector(loadURL:userInitiated:)]) [_tab loadURL:url userInitiated:userInitiated];
   else [_tab loadURL:url];

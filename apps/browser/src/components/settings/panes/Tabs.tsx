@@ -4,6 +4,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { tabLayoutOf } from "../../../store/model";
 import { peekModifierOf, splitLinkModifierOf, type PeekModifier, type Settings, type SplitLinkModifier } from "../../../store/settings";
+import { liquidGlass } from "../../glass";
 import { Checkbox, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { setting } from "../settingsIndex";
 
@@ -76,7 +77,10 @@ export function TabsPane() {
       <Group style={{ marginTop: 14 }}>
         {toggle("hideToolbarWhileScrolling", "tabs.hideToolbarWhileScrolling")}
         {!top && toggle("showSidebarButton", "tabs.showSidebarButton")}
+        {!top && toggle("showClearButton", "tabs.showClearButton")}
         {!top && toggle("balancedTopApps", "tabs.balancedTopApps")}
+        {!top && liquidGlass && toggle("pinnedTabIconRing", "tabs.pinnedTabIconRing")}
+        {toggle("fadeUnloadedTabs", "tabs.fadeUnloadedTabs")}
       </Group>
 
       <SectionHeader title="General" />
@@ -109,6 +113,7 @@ export function TabsPane() {
 
       <SectionHeader title="Tab groups" />
       <Group>
+        {toggle("warnBeforeClosingTabGroup", "tabs.warnBeforeClosingTabGroup")}
         {toggle("cmdClickCreatesTabGroup", "tabs.cmdClickCreatesTabGroup")}
         {toggle("optShiftClickOpensInGroup", "tabs.optShiftClickOpensInGroup")}
         {toggle("autoGroupMeetingTabs", "tabs.autoGroupMeetingTabs")}

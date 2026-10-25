@@ -48,6 +48,7 @@ export type BrowserSource = {
   needsFullDiskAccess?: boolean;
   keychainService?: string;
   profiles: BrowserProfile[];
+  sidebar?: "arc" | "zen";
 };
 
 export type BookmarkRole = "toolbar" | "other" | "mobile" | "menu" | "readingList" | "liveGitHubPullRequests" | "liveBitbucketPullRequests";
@@ -112,6 +113,8 @@ export type ImportWarning = {
   message: string;
 };
 
+export type ImportedFavicon = { page: string; icon: string; png: string };
+
 export type ImportResult = {
   browserId: string;
   profileId: string;
@@ -128,6 +131,7 @@ export type ImportResult = {
   vaultToken?: string;
   spaces: SpaceSuggestion[];
   favorites: ImportedTab[];
+  favicons: ImportedFavicon[];
   failed: ImportKind[];
   warnings: ImportWarning[];
 };
@@ -186,6 +190,7 @@ export type DiaTabsResult = {
   windowCount: number;
   skipped: number;
   duplicates: number;
+  favicons: ImportedFavicon[];
 };
 
 export type DiaAutomationStatus = "granted" | "denied" | "notDetermined" | "notRunning" | "notInstalled";

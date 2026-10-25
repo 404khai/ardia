@@ -4,6 +4,8 @@ import { Text, View } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
+import { engineMark, ENGINE_NAMES, ENGINE_SYMBOLS } from "../../store/engines";
+import { isPageUnloaded } from "../../store/pinShare";
 import { Favicon } from "../primitives";
 
 export const SYMBOL_PREFIX = "symbol:";
@@ -31,13 +33,41 @@ export const TabIcon = memo(function TabIcon({
   direct?: boolean;
 }) {
   const sleeping = useIsSleeping(tabId ?? "");
+  const unloaded = useBrowser((s) => s.settings.fadeUnloadedTabs && !!tabId && isPageUnloaded(s, tabId));
   const props = { url, favicon, icon, size, color, direct };
   return (
-    <View style={{ opacity: sleeping ? SLEEPING_OPACITY : 1 }}>
+    <View style={{ opacity: sleeping || unloaded ? SLEEPING_OPACITY : 1 }}>
       {profile || !tabId ? <Icon {...props} profileId={profile} /> : <TabProfileIcon {...props} tabId={tabId} />}
+      {tabId && size >= 14 ? <EngineMark tabId={tabId} size={size} /> : null}
     </View>
   );
 });
+
+function EngineMark({ tabId, size }: { tabId: string; size: number }) {
+  const theme = useTheme();
+  const mark = useBrowser((s) => engineMark(s, tabId));
+  if (!mark) return null;
+  const box = Math.round(size * 0.6);
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityLabel={`Opens in ${ENGINE_NAMES[mark]}`}
+      style={{
+        position: "absolute",
+        right: -box / 3,
+        bottom: -box / 3,
+        width: box,
+        height: box,
+        borderRadius: box / 2,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: theme.dark ? "#2C2C2E" : "#FFFFFF",
+      }}
+    >
+      <Symbol name={ENGINE_SYMBOLS[mark]} size={box - 3} weight="semibold" color={theme.icon} style={{ width: box, height: box }} />
+    </View>
+  );
+}
 
 function TabProfileIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "profileId"> & { tabId: string }) {
   const profileId = useBrowser((s) => s.tabs[tabId]?.profileId);

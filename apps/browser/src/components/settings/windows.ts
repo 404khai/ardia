@@ -18,6 +18,7 @@ export type SettingsPane =
   | "autofill"
   | "extensions"
   | "search"
+  | "engines"
   | "shortcuts"
   | "liveFolders"
   | "calendar"

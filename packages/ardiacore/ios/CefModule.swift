@@ -59,6 +59,7 @@ public class CefModule: Module {
     AsyncFunction("setDisplayMediaPicker") { (enabled: Bool) in ArdiaCoreWebView.setDisplayMediaPicker(enabled) }.runOnQueue(.main)
     AsyncFunction("setPeekModifier") { (modifier: String) in ArdiaCoreWebView.setPeekModifier(modifier) }.runOnQueue(.main)
     AsyncFunction("setSplitLinkModifier") { (modifier: String) in ArdiaCoreWebView.setSplitLinkModifier(modifier) }.runOnQueue(.main)
+    AsyncFunction("setSelectionPopover") { (enabled: Bool) in ArdiaCoreWebView.setSelectionPopoverEnabled(enabled) }.runOnQueue(.main)
     AsyncFunction("devPostPeekMouseUp") { (keys: String, tabId: String) in ArdiaCoreWebView.devPostPeekMouseUp(keys, over: tabId) }.runOnQueue(.main)
     AsyncFunction("setAutoPictureInPicture") { (enabled: Bool) in ArdiaCoreWebView.setAutoPictureInPictureEnabled(enabled) }.runOnQueue(.main)
     AsyncFunction("setVideoUpscaling") { (enabled: Bool) in ArdiaCoreWebView.setVideoUpscalingEnabled(enabled) }.runOnQueue(.main)

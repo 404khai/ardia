@@ -79,6 +79,45 @@ public final class Importer: @unchecked Sendable {
       return parsed
     }
 
+    var zen: ZenSidebar?
+    func zenSidebar() throws -> ZenSidebar {
+      if let zen { return zen }
+      let parsed = try ZenSidebar.load(profile: dir, profileId: profileId, cancellation: cancellation)
+      zen = parsed
+      return parsed
+    }
+
+    func sidebarSpaces() throws -> [SpaceSuggestion]? {
+      switch def.sidebar {
+      case .arc:
+        return try arcSidebar().spaces.filter { $0.profileId == profileId }
+      case .zen:
+        let spaces = (try? zenSidebar())?.spaces ?? []
+        return spaces.isEmpty ? nil : spaces
+      case nil:
+        return nil
+      }
+    }
+
+    func take(_ all: [SpaceSuggestion], for kind: ImportKind) -> Int {
+      let spaces = all.filter { options.spaceIds?.contains($0.id) ?? true }
+      result.spaces = spaces.map { space in
+        var s = space
+        if !kinds.contains(.pinnedTabs) { s.pinned = [] }
+        if !kinds.contains(.tabs) { s.tabs = [] }
+        return s
+      }
+      switch kind {
+      case .tabs:
+        result.tabs = spaces.flatMap(\.tabs)
+        return result.tabs.count
+      case .pinnedTabs:
+        return spaces.reduce(0) { $0 + $1.pinned.reduce(0) { $0 + $1.linkCount } }
+      default:
+        return spaces.count
+      }
+    }
+
     let ordered = ImportKind.allCases.filter(kinds.contains)
     for kind in ordered {
       try cancellation.check()
@@ -108,30 +147,25 @@ public final class Importer: @unchecked Sendable {
           result.tabGroups = session.groups
           count = session.tabs.count
         case (.tabs, .firefox):
-          let session = try Firefox.loadSession(profile: dir)
-          result.tabs = session.tabs
-          result.tabGroups = session.groups
-          count = session.tabs.count
+          if let spaces = try sidebarSpaces() {
+            count = take(spaces, for: kind)
+          } else {
+            let session = try Firefox.loadSession(profile: dir)
+            result.tabs = session.tabs
+            result.tabGroups = session.groups
+            count = session.tabs.count
+          }
 
-        case (.spaces, .arc), (.pinnedTabs, .arc), (.tabs, .arc):
-          let spaces = try arcSidebar().spaces.filter { $0.profileId == profileId && (options.spaceIds?.contains($0.id) ?? true) }
-          result.spaces = spaces.map { space in
-            var s = space
-            if !kinds.contains(.pinnedTabs) { s.pinned = [] }
-            if !kinds.contains(.tabs) { s.tabs = [] }
-            return s
-          }
-          switch kind {
-          case .tabs:
-            result.tabs = spaces.flatMap(\.tabs)
-            count = result.tabs.count
-          case .pinnedTabs:
-            count = spaces.reduce(0) { $0 + $1.pinned.reduce(0) { $0 + $1.linkCount } }
-          default:
-            count = spaces.count
-          }
+        case (.spaces, .arc), (.pinnedTabs, .arc), (.tabs, .arc), (.spaces, .firefox), (.pinnedTabs, .firefox):
+          guard def.sidebar != nil else { throw ImportError.unsupported("\(def.name) has no \(kind.rawValue) to import") }
+          guard let spaces = try sidebarSpaces() else { throw ImportError.notFound("No \(def.name) spaces in this profile") }
+          count = take(spaces, for: kind)
         case (.favorites, .arc):
           result.favorites = try arcSidebar().favorites[profileId] ?? []
+          count = result.favorites.count
+        case (.favorites, .firefox):
+          guard def.sidebar == .zen else { throw ImportError.unsupported("\(def.name) has no \(kind.rawValue) to import") }
+          result.favorites = try zenSidebar().essentials
           count = result.favorites.count
 
         case (.passwords, .chromium), (.passwords, .arc):
@@ -144,7 +178,7 @@ public final class Importer: @unchecked Sendable {
             if outcome.items.isEmpty { throw ImportError.locked("The \(def.name) key didn't decrypt any passwords") }
           }
         case (.passwords, .firefox):
-          guard let password = primaryPassword(browserId) else { throw ImportError.locked("Allow Firefox password import first") }
+          guard let password = primaryPassword(browserId) else { throw ImportError.locked("Allow \(def.name) password import first") }
           result.credentials = try FirefoxLogins.logins(profile: dir, primaryPassword: password, cancellation: cancellation)
           count = result.credentials.count
 
@@ -196,7 +230,20 @@ public final class Importer: @unchecked Sendable {
       }
       if kind != .history || !succeeded { observer.progress(ImportProgress(kind: kind, phase: .end, processed: count, total: count)) }
     }
+    if def.family == .chromium || def.family == .arc {
+      try cancellation.check()
+      result.favicons = ChromiumFavicons.read(profiles: [dir], pages: ChromiumFavicons.pages(of: result))
+    }
+    if let zen {
+      result.favicons = zen.favicons(for: ChromiumFavicons.pages(of: result))
+    }
     return result
+  }
+
+  public func favicons(browserId: String, pages: [String]) -> [ImportedFavicon] {
+    guard let def = BrowserDefinition.find(browserId), def.family == .chromium || def.family == .arc else { return [] }
+    let dirs = discovery.chromiumProfiles(def).compactMap { try? discovery.profileDirectory(def, $0.id) }
+    return ChromiumFavicons.read(profiles: dirs, pages: pages)
   }
 
   static func count(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }

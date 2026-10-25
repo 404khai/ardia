@@ -87,6 +87,7 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
   pinnedUrl: t.pinnedUrl,
   ...(isPinnedRow(t) ? { pinnedAsRow: true as const } : {}),
   ...(t.tileFolder && pinSection(t) === "tile" ? { tileFolder: t.tileFolder } : {}),
+  ...(t.engine ? { engine: t.engine } : {}),
   profileId: t.profileId,
 });
 

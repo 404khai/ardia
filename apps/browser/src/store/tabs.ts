@@ -28,6 +28,7 @@ import { mainWindowFor } from "./small";
 import { leavesEmptyWindow } from "./newTabBar";
 import { holderOf, swapPinPage, withSharedFamily } from "./pinShare";
 import { removeFromSplits, splitOf, withPinnedPanes } from "./splits";
+import { engineForUrl, tabEngine, typedNavigationEngine } from "./engines";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
 
 export type NewTabOptions = {
@@ -321,6 +322,8 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     if (options?.url && !options.adoptId && openOutsideTab(resolveInput(fromLegacyUrl(options.url.trim()), searchUrlPrefix(get().settings)), windowId)) return "";
     const beside = options?.newTabCommand && !options.openerId ? nextToActive(get(), windowId, options.profileId) : undefined;
     let [next, id] = withNewTab(get(), windowId, beside ? { ...options, ...beside } : options);
+    const typed = beside && next.tabs[id]?.navigation;
+    if (typed) next = { ...next, tabs: { ...next.tabs, [id]: { ...next.tabs[id]!, engine: engineForUrl(next, typed.url) } } };
     if (id && options?.openerId) next = groupWithOpener(next, id, options.openerId, !!options.background);
     else if (id && beside && !inPinnedContainer(next, beside.openerId)) next = groupWithOpener(next, id, beside.openerId, false);
     set(next);
@@ -409,8 +412,11 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
     const base = userInitiated && tab.url ? forgetOpeners(s, tab.windowId) : s;
     const navigation = navigationTo(url, userInitiated);
-    startNavigation(id, navigation);
-    set(apply(base, { tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation, url: tab.url || url } } }));
+    const engine = userInitiated ? typedNavigationEngine(s, tab, url) : undefined;
+    const switching = !!engine && engine !== tabEngine(s, id);
+    if (!switching) startNavigation(id, navigation);
+    const page = { ...(engine ? { engine } : {}), ...(switching ? { adoptId: undefined } : {}) };
+    set(apply(base, { tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation, url: tab.url || url, ...page } } }));
     const ui = get().windowUi[tab.windowId];
     if (ui?.panel.open) get().closePanel(tab.windowId);
   },

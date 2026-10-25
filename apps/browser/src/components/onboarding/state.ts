@@ -13,7 +13,7 @@ export const STEPS: OnboardingStep[] = ["intro", "source", "layout", "tabs", "lo
 
 export type Preset = "arc" | "dia";
 
-export type BrowserSourceId = "arc" | "dia" | "chrome" | "safari" | "firefox" | "brave" | "edge" | "fresh";
+export type BrowserSourceId = "arc" | "dia" | "chrome" | "safari" | "firefox" | "zen" | "brave" | "edge" | "fresh";
 
 export const PRESETS: Record<Preset, Partial<Settings>> = {
   dia: {
@@ -109,7 +109,7 @@ export function questionsFor(step: OnboardingStep): Question[] {
   return tabLayout === "top" ? list.filter((q) => q.id !== "address") : list;
 }
 
-export const presetFor = (source: BrowserSourceId | null): Preset => (source === "arc" ? "arc" : "dia");
+export const presetFor = (source: BrowserSourceId | null): Preset => (source === "arc" || source === "zen" ? "arc" : "dia");
 
 export type Extras = {
   color: ProfileColor;

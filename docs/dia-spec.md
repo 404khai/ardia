@@ -177,7 +177,10 @@ the same as top"), so if a Dia capture ever differs, the owner's equal insets wi
   Titles fade out at the trailing edge instead of using an ellipsis.
   - Hover: `TabBackgroundHovered` white 16% (dark) or white 55% (light). An `xmark` close button
     appears on the right, with its own ~22pt hover square.
-  - Pressed: white 31% (dark) or 70% (light).
+  - Pressed: white 31% (dark) or 70% (light). Dia has no pressed colour for the selected tab.
+    Ours also eases the pressed row to scale 0.99 and opacity 0.95 (80 ms in, 180 ms out, ease-out cubic; no scale
+    with Reduce Motion), the selected row and split panes included, so a click on the selected tab shows too
+    (`sidebar/PressFeedback.tsx`, issue #232).
   - Selected (regular): dark fill ≈ black 40% (sample `#1B1618` on `#2A1E23`), white title.
   - Audio: a `speaker.wave.2` glyph after the favicon.
 - "+ New Tab" row: label in `secondaryLabelColor` (white 0.55 dark), the `plus` in `tertiaryLabelColor` (white 0.25

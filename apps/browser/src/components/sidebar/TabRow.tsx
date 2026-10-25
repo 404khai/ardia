@@ -14,9 +14,11 @@ import { clickTab, commitRename, endRename, startRename, tabTitle } from "./acti
 import { useDragItem, useDropOnto } from "./dnd";
 import { useShift, type EntryMotion } from "./entryMotion";
 import { dismissHover, useRowHover } from "./hover";
+import { pressTabClose, useTabCloseControl } from "./closeControl";
 import { middleClickTab, openTabMenu } from "./menus";
 import { ACTIVE, LOADING, PLAYING, SELECTED, useRowState } from "./rowState";
 import { registerRow, useSidebarUi } from "./state";
+import { PressFeedback } from "./PressFeedback";
 import { briefTitleForDate } from "../briefs/assets";
 import { BriefTabThumbnail } from "../briefs/BriefTabThumbnail";
 import { briefDateFromUrl } from "../../lib/briefDates";
@@ -67,6 +69,7 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   const [moved, movedRef] = useShift(shift, useCallback((v: View | null) => registerRow(windowId, tabId, v), [windowId, tabId]));
   const backToPin = useHover();
+  const closeControl = useTabCloseControl(tabId);
   if (!tab) return null;
   const isBrief = internalPageOf(tabDestination(tab)) === "brief";
   const briefDate = isBrief ? briefDateFromUrl(tabDestination(tab)) : "";
@@ -92,72 +95,73 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
           }}
         >
           <Pressable
-            tooltip={title}
             onPress={(e) => {
               dismissHover();
               clickTab(windowId, tabId, clickMods(e));
             }}
           >
             {({ pressed }) => (
-              <Surface
-                fill={hex(onto || (!active && pressed) ? theme.tabPressed : fill)}
-                cornerRadius={10}
-                borderWidth={border}
-                borderColor={selected && !active ? hex(tokens.multiSelectedStroke) : undefined}
-                borderColors={active ? theme.tabSelectedBorder.map(hex) : undefined}
-                shadowColor={active ? hex(theme.tabSelectedShadow) : undefined}
-                shadowOpacity={active ? 1 : 0}
-                shadowRadius={theme.tabSelectedShadowRadius}
-                shadowOffset={[0, 0.5]}
-                style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
-              >
-                {isBrief ? (
-                  <Symbol name="doc" size={17} color={active ? theme.tabSelectedText : theme.icon} style={{ width: 16, height: 20 }} />
-                ) : resettable ? (
-                  <View {...backToPin.hoverProps}>
-                    <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tab.id)} tooltip="Back to Pinned URL (⌘↩)">
-                      {resetting ? (
-                        <View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
-                          <Symbol name="arrow.uturn.backward" size={11} weight="semibold" color={active ? theme.tabSelectedText : theme.textTab} style={{ width: 16, height: 16 }} />
-                        </View>
-                      ) : (
-                        <View>
-                          <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
-                          <TabBadges tabId={tab.id} />
-                        </View>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View>
-                    <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
-                    <TabBadges tabId={tab.id} />
-                  </View>
-                )}
-                {(playingAudio || tab.muted) && (
-                  <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
-                    <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
-                  </Pressable>
-                )}
-                {renaming ? (
-                  <RenameField
-                    initial={tab.customTitle ?? tab.title}
-                    placeholder={tab.title || "Tab name"}
-                    color={active ? theme.tabSelectedText : theme.textPrimary}
-                    onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
-                  />
-                ) : (
-                  <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, minWidth: 0, height: 18, marginLeft: 5 }} />
-                )}
-                {isBrief && !renaming && <BriefTabThumbnail date={briefDate} hovered={hovered} />}
-                <HoverSlot
-                  hovered={hovered && !renaming}
-                  width={22}
-                  hover={<IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => middleClickTab(tab.id)} tooltip="Close Tab (⌘W)" />}
+              <PressFeedback pressed={pressed}>
+                <Surface
+                  fill={hex(onto || (!active && pressed) ? theme.tabPressed : fill)}
+                  cornerRadius={10}
+                  borderWidth={border}
+                  borderColor={selected && !active ? hex(tokens.multiSelectedStroke) : undefined}
+                  borderColors={active ? theme.tabSelectedBorder.map(hex) : undefined}
+                  shadowColor={active ? hex(theme.tabSelectedShadow) : undefined}
+                  shadowOpacity={active ? 1 : 0}
+                  shadowRadius={theme.tabSelectedShadowRadius}
+                  shadowOffset={[0, 0.5]}
+                  style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
-                  {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
-                </HoverSlot>
-              </Surface>
+                  {isBrief ? (
+                    <Symbol name="doc" size={17} color={active ? theme.tabSelectedText : theme.icon} style={{ width: 16, height: 20 }} />
+                  ) : resettable ? (
+                    <View {...backToPin.hoverProps}>
+                      <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tab.id)} tooltip="Back to Pinned URL (⌘↩)">
+                        {resetting ? (
+                          <View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
+                            <Symbol name="arrow.uturn.backward" size={11} weight="semibold" color={active ? theme.tabSelectedText : theme.textTab} style={{ width: 16, height: 16 }} />
+                          </View>
+                        ) : (
+                          <View>
+                            <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+                            <TabBadges tabId={tab.id} />
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View>
+                      <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+                      <TabBadges tabId={tab.id} />
+                    </View>
+                  )}
+                  {(playingAudio || tab.muted) && (
+                    <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
+                      <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
+                    </Pressable>
+                  )}
+                  {renaming ? (
+                    <RenameField
+                      initial={tab.customTitle ?? tab.title}
+                      placeholder={tab.title || "Tab name"}
+                      color={active ? theme.tabSelectedText : theme.textPrimary}
+                      onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
+                    />
+                  ) : (
+                    <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, minWidth: 0, height: 18, marginLeft: 5 }} />
+                  )}
+                  {isBrief && !renaming && <BriefTabThumbnail date={briefDate} hovered={hovered} />}
+                  <HoverSlot
+                    hovered={hovered && !renaming}
+                    width={22}
+                    hover={<IconButton icon={closeControl.icon} size={10} weight="semibold" box={22} radius={6} onPress={() => pressTabClose(tab.id)} tooltip={closeControl.tooltip} />}
+                  >
+                    {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
+                  </HoverSlot>
+                </Surface>
+              </PressFeedback>
             )}
           </Pressable>
         </ContextMenuArea>
@@ -269,19 +273,23 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
     <View {...hoverProps} style={{ flex: 1, minWidth: 0 }}>
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)}>
         <Pressable onPress={(e) => clickTab(windowId, tabId, clickMods(e))}>
-          <View
-            style={{
-              height: layout.rowHeight - 6,
-              borderRadius: 7,
-              flexDirection: "row",
-              alignItems: "center",
-              paddingLeft: 6,
-              backgroundColor: hovered && !active ? theme.rowHover : undefined,
-            }}
-          >
-            <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
-            <FadeLabel text={tabTitle(tab)} fontSize={12} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 16, marginLeft: 5 }} />
-          </View>
+          {({ pressed }) => (
+            <PressFeedback pressed={pressed}>
+              <View
+                style={{
+                  height: layout.rowHeight - 6,
+                  borderRadius: 7,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingLeft: 6,
+                  backgroundColor: active ? undefined : pressed ? theme.tabPressed : hovered ? theme.rowHover : undefined,
+                }}
+              >
+                <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
+                <FadeLabel text={tabTitle(tab)} fontSize={12} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 16, marginLeft: 5 }} />
+              </View>
+            </PressFeedback>
+          )}
         </Pressable>
       </ContextMenuArea>
     </View>

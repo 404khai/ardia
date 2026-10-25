@@ -6,6 +6,10 @@ public struct BrowserDefinition: Sendable {
     case automation
   }
 
+  public enum Sidebar: String, Codable, Sendable {
+    case arc, zen
+  }
+
   public var id: String
   public var name: String
   public var family: Family
@@ -15,6 +19,7 @@ public struct BrowserDefinition: Sendable {
   public var keychainAccount: String?
   public var rootIsProfile = false
   public var keychainFallbacks: [KeychainItem] = []
+  public var sidebar: Sidebar?
 
   public struct KeychainItem: Equatable, Sendable {
     public var service: String
@@ -32,6 +37,7 @@ public struct BrowserDefinition: Sendable {
     dia,
     .init(id: "safari", name: "Safari", family: .safari, bundleIds: ["com.apple.Safari"]),
     .init(id: "firefox", name: "Firefox", family: .firefox, bundleIds: ["org.mozilla.firefox"], dataPath: "Firefox"),
+    zen,
     chromium("edge", "Microsoft Edge", ["com.microsoft.edgemac"], "Microsoft Edge", "Microsoft Edge"),
     chromium("edgeBeta", "Microsoft Edge Beta", ["com.microsoft.edgemac.Beta"], "Microsoft Edge Beta", "Microsoft Edge"),
     chromium("edgeDev", "Microsoft Edge Dev", ["com.microsoft.edgemac.Dev"], "Microsoft Edge Dev", "Microsoft Edge"),
@@ -58,7 +64,11 @@ public struct BrowserDefinition: Sendable {
   ]
 
   static let arc = BrowserDefinition(id: "arc", name: "Arc", family: .arc, bundleIds: ["company.thebrowser.Browser"],
-                                     dataPath: "Arc/User Data", keychainService: "Arc Safe Storage", keychainAccount: "Arc")
+                                     dataPath: "Arc/User Data", keychainService: "Arc Safe Storage", keychainAccount: "Arc",
+                                     sidebar: .arc)
+
+  static let zen = BrowserDefinition(id: "zen", name: "Zen", family: .firefox, bundleIds: ["app.zen-browser.zen"],
+                                     dataPath: "zen", sidebar: .zen)
 
   static let dia = BrowserDefinition(id: "dia", name: "Dia", family: .chromium, bundleIds: ["company.thebrowser.dia"],
                                      dataPath: "Dia/User Data", keychainService: "Dia Safe Storage", keychainAccount: "Dia")
@@ -112,6 +122,7 @@ public struct BrowserSource: Codable, Equatable, Sendable {
   public var needsFullDiskAccess = false
   public var keychainService: String?
   public var profiles: [BrowserProfile]
+  public var sidebar: BrowserDefinition.Sidebar?
 }
 
 public struct BrowserDiscovery {
@@ -165,7 +176,7 @@ public struct BrowserDiscovery {
       id: def.id, name: def.name, family: def.family, appPath: app?.path,
       iconPath: app.flatMap { iconFor($0, def.id) },
       requiresExport: def.family == .safari, needsKeychain: def.isChromiumBased,
-      needsFullDiskAccess: denied, keychainService: def.keychainService, profiles: profiles
+      needsFullDiskAccess: denied, keychainService: def.keychainService, profiles: profiles, sidebar: def.sidebar
     )
   }
 
@@ -315,10 +326,20 @@ public struct BrowserDiscovery {
       var kinds: [ImportKind] = []
       if has("places.sqlite") { kinds += [.bookmarks, .history] }
       if Firefox.sessionFile(profile: dir) != nil { kinds.append(.tabs) }
-      if has("logins.json") { kinds.append(.passwords) }
+      if has("logins.json") || has("logins.db") { kinds.append(.passwords) }
       if has("cookies.sqlite") { kinds.append(.cookies) }
+      var spaces: [SpaceSummary]?
+      if def.sidebar == .zen, let sidebar = try? ZenSidebar.load(profile: dir, profileId: p.path), !sidebar.spaces.isEmpty {
+        spaces = sidebar.spaces.map {
+          SpaceSummary(id: $0.id, name: $0.name, color: $0.color, emoji: $0.emoji, icon: $0.icon,
+                       pinnedCount: $0.pinned.reduce(0) { $0 + $1.linkCount }, tabCount: $0.tabs.count, theme: nil)
+        }
+        kinds += [.spaces, .pinnedTabs]
+        if !kinds.contains(.tabs) { kinds.append(.tabs) }
+        if !sidebar.essentials.isEmpty { kinds.append(.favorites) }
+      }
       return BrowserProfile(id: p.path, name: p.name, path: dir.path, email: nil, avatarPath: nil, color: nil,
-                            isDefault: p.isDefault, available: kinds, spaces: nil)
+                            isDefault: p.isDefault, available: kinds, spaces: spaces)
     }
   }
 }

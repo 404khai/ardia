@@ -11,6 +11,7 @@ import { markdownLink } from "@ardia/core";
 import { useBrowser } from "../store/browser";
 import { activeTabId, bookmarkProfileId, isPinnedRow, pinSection, resolveWindowId } from "../store/model";
 import {
+  closeGroup,
   closeTab,
   createProfile,
   cycleProfile,
@@ -33,6 +34,7 @@ import { addressBarInSidebar, commandBarCentred } from "../components/layout/win
 import { addFolderToSidebar, restoreArcFolders } from "./bookmarkGroups";
 import { withLivePage } from "./livePage";
 import { webviews } from "./webviews";
+import { togglePageEngine } from "./engines";
 import { goBack, goForward } from "../components/layout/history";
 import { openSplitPane } from "../components/layout/splitActions";
 import { runSidebarCommand } from "../components/sidebar/commands";
@@ -263,7 +265,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
     case "closeTabGroup": {
       const group = groupOf(s, tabId);
-      return group ? s.closeGroup(group.id) : undefined;
+      return group ? void closeGroup(group.id) : undefined;
     }
     case "openProfileMenu":
       return s.windows[windowId]?.incognito ? undefined : void openProfileMenu(windowId);
@@ -281,6 +283,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       const node = arg ? s.bookmarks.nodes[arg] : undefined;
       return node?.kind === "url" && tab ? s.navigate(tab.id, node.url) : undefined;
     }
+    case "togglePageEngine":
+      return void (tabId && togglePageEngine(tabId));
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
     case "downloads":

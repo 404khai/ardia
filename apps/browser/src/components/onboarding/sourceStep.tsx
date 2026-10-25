@@ -23,6 +23,11 @@ const CANDIDATES: Candidate[][] = [
   ],
   [{ id: "firefox", name: "Firefox", app: "/Applications/Firefox.app" }],
   [
+    { id: "zen", name: "Zen", app: "/Applications/Zen.app" },
+    { id: "zen", name: "Zen", app: "/Applications/Zen Browser.app" },
+    { id: "zen", name: "Zen Twilight", app: "/Applications/Zen Twilight.app" },
+  ],
+  [
     { id: "brave", name: "Brave", app: "/Applications/Brave Browser.app" },
     { id: "brave", name: "Brave Beta", app: "/Applications/Brave Browser Beta.app", importId: "braveBeta" },
     { id: "brave", name: "Brave Nightly", app: "/Applications/Brave Browser Nightly.app", importId: "braveNightly" },

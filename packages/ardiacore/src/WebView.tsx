@@ -4,6 +4,7 @@ import { forwardRef, useImperativeHandle, useRef } from "react";
 import { findNodeHandle, type NativeSyntheticEvent, type ViewProps } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
+import type { PageEngine } from "./webkit";
 
 export type NavigationState = {
   url: string;
@@ -15,6 +16,7 @@ export type NavigationState = {
   themeColorSource: "meta" | "header" | "background" | null;
   initialDocumentAccessed?: boolean;
   committedInitial?: boolean;
+  committedUrl?: string;
 };
 
 export type MediaState = { playing: boolean; muted: boolean };
@@ -141,6 +143,7 @@ export type AutofillPromptAnswer = "accept" | "decline" | "dismiss";
 export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type WebViewProps = ViewProps & {
+  engine?: PageEngine;
   url?: string;
   profile?: string;
   adoptId?: string;
@@ -332,6 +335,8 @@ type NativeHandle = Omit<
 };
 
 const NativeWebView = requireNativeViewManager<NativeProps>("ArdiaCEF");
+let NativeWebKitView: typeof NativeWebView | undefined;
+const webKitView = () => (NativeWebKitView ??= requireNativeViewManager<NativeProps>("ArdiaWebKit"));
 
 const VIEW_RETRIES = 3;
 const isViewMissing = (error: unknown) =>
@@ -408,6 +413,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
 
   const nativeProps: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
+    if (key === "engine") continue;
     if (key === "url" || key === "shownUrl") {
       nativeProps[key] = typeof value === "string" ? toEngineUrl(value) : value;
       continue;
@@ -419,8 +425,9 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
         : value;
   }
 
+  const Native = props.engine === "webkit" ? webKitView() : NativeWebView;
   return (
-    <NativeWebView
+    <Native
       // @ts-expect-error expo view managers accept a ref to their AsyncFunctions
       ref={native}
       {...(nativeProps as NativeProps)}

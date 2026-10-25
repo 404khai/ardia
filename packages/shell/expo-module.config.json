@@ -15,6 +15,7 @@
       "SurfaceModule",
       "VisualEffectModule",
       "GlassEffectModule",
+      "PopoverBubbleModule",
       "SystemModule",
       "FileDragModule",
       "FileDropModule",

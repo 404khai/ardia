@@ -525,6 +525,7 @@ enum MainMenu {
       cmd("Show Full URL", "toggleFullUrl"),
       cmd("Show Address Bar in Sidebar", "toggleAddressBar"),
       cmd("Cast…", "cast"),
+      cmd("Open Page in WebKit", "togglePageEngine"),
       .separator(),
       cmd("Zoom to Actual Size", "zoomReset", "0"),
       cmd("Zoom In", "zoomIn", "+"),

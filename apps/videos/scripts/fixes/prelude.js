@@ -54,3 +54,5 @@ const CMD = 1048576;
 const SHIFT = 131072;
 const OPT = 524288;
 const done = (extra) => JSON.stringify(Object.assign({ events, frame: st().windows[W].frame }, extra || {}));
+const KEYCODES = { a: 0, s: 1, d: 2, f: 3, h: 4, g: 5, z: 6, x: 7, c: 8, v: 9, b: 11, q: 12, w: 13, e: 14, r: 15, y: 16, t: 17, o: 31, u: 32, i: 34, p: 35, l: 37, j: 38, k: 40, n: 45, m: 46, " ": 49 };
+const typeText = (text, gap = 120) => text.split("").reduce((p, ch) => p.then(() => dw(`keys:0:${ch}:${KEYCODES[ch]}`)).then(() => sleep(gap)), Promise.resolve());

@@ -12,6 +12,7 @@ export const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "autofill", title: "Autofill", icon: "creditcard" },
   { id: "extensions", title: "Extensions", icon: "puzzlepiece.extension" },
   { id: "search", title: "Search Engine", icon: "magnifyingglass" },
+  { id: "engines", title: "Engines", icon: "safari" },
   { id: "shortcuts", title: "Keyboard Shortcuts", icon: "keyboard" },
   { id: "liveFolders", title: "Live Folders", icon: "dot.radiowaves.left.and.right" },
   { id: "dailyBriefs", title: "Daily Briefs", icon: "sun.max" },
@@ -19,7 +20,7 @@ export const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "advanced", title: "Advanced", icon: "slider.horizontal.3" },
 ];
 
-type Row = { title: string; description?: string; keywords?: string[] };
+type Row = { title: string; description?: string; keywords?: string[]; liquidGlassOnly?: true };
 type Section = { section: string; rows: Record<string, Row> };
 
 const APP = "Ardia";
@@ -110,10 +111,26 @@ const ROWS: Record<SettingsPane, Section[]> = {
           keywords: ["auto hide", "compact"],
         },
         showSidebarButton: { title: "Show sidebar button", description: "⌘S and View › Auto-Hide Tabs still hide and show the sidebar.", keywords: ["toggle sidebar"] },
+        showClearButton: {
+          title: "Show Clear button",
+          description: "The ↓ Clear between your pinned tabs and your tabs. ⇧⌘K and File › Close All Tabs still clear them.",
+          keywords: ["clear unpinned tabs", "close all tabs", "clear today", "divider", "arc"],
+        },
         balancedTopApps: {
           title: "Grow Top Apps as the sidebar widens",
           description: "As in Arc: up to four tiles across in balanced rows, and a wider sidebar makes them larger. Off, as in Dia, each row fills with as many tiles as fit.",
           keywords: ["pinned tiles", "favorites", "grid", "columns", "rows", "arc"],
+        },
+        pinnedTabIconRing: {
+          title: "Highlight pinned tabs in their icon's colors",
+          description: "As in Dia: the Top App you're on gets a ring and tint from its icon instead of the raised glass.",
+          keywords: ["dia", "liquid glass", "top apps", "favicon", "colour", "ring", "tint", "selected tile"],
+          liquidGlassOnly: true,
+        },
+        fadeUnloadedTabs: {
+          title: "Fade icons of unloaded tabs",
+          description: "A tab whose page isn't loaded, like a closed pinned tab or one restored after a relaunch, shows its icon faded, as sleeping tabs do. Clicking it loads the page.",
+          keywords: ["unloaded", "asleep", "sleeping", "discarded", "dim", "grey", "gray", "inactive", "pinned", "closed"],
         },
       },
     },
@@ -173,6 +190,11 @@ const ROWS: Record<SettingsPane, Section[]> = {
     {
       section: "Tab groups",
       rows: {
+        warnBeforeClosingTabGroup: {
+          title: "Warn before closing a tab group",
+          description: "Asks before Close Group closes a group and its tabs. A pinned group's − unloads its tabs instead, and keeps the group.",
+          keywords: ["confirm", "close group", "folder", "accidentally"],
+        },
         cmdClickCreatesTabGroup: { title: "⌘-clicking links creates tab groups", keywords: ["command click", "cmd click"] },
         optShiftClickOpensInGroup: {
           title: "⌥⇧-click opens tab in group",
@@ -288,6 +310,16 @@ const ROWS: Record<SettingsPane, Section[]> = {
       rows: { otherEngines: { title: "Other search engines", description: "Type a shortcut and press Tab in the command bar to search a site directly.", keywords: ["custom search", "site search", "keyword"] } },
     },
     { section: "Suggestions", rows: { suggestions: { title: "Show search suggestions", description: "Sends what you type to your search engine to suggest searches.", keywords: ["autocomplete"] } } },
+    {
+      section: "Text selection",
+      rows: {
+        showSelectionSearch: {
+          title: "Show search button when selecting text",
+          description: "Shows a Search button above text you select on a page.",
+          keywords: ["selection", "selected text", "popover", "popup", "highlight"],
+        },
+      },
+    },
   ],
   shortcuts: [
     {
@@ -306,7 +338,11 @@ const ROWS: Record<SettingsPane, Section[]> = {
   liveFolders: [
     {
       section: "Live folders",
-      rows: { folders: { title: "Live folders", description: "Live folders refresh every few minutes; items open as tabs that stay in the folder.", keywords: ["new live folder"] } },
+      rows: {
+        folders: { title: "Live folders", description: "Live folders refresh every few minutes; items open as tabs that stay in the folder.", keywords: ["new live folder", "hidden", "refresh"] },
+        groupStacks: { title: "Group stacked pull requests", description: "Pull requests based on each other's branches sit together under one row.", keywords: ["stack", "stacked pull requests"] },
+        showCompleted: { title: "Show completed pull requests", description: "Merged, closed and reviewed pull requests stay listed for a day under Completed.", keywords: ["completed", "merged", "closed"] },
+      },
     },
     {
       section: "Pull Requests",
@@ -377,6 +413,53 @@ const ROWS: Record<SettingsPane, Section[]> = {
       },
     },
   ],
+  engines: [
+    {
+      section: "Default engine",
+      rows: {
+        defaultEngine: {
+          title: "Open pages in",
+          description: "New pages open in this engine unless a website rule says otherwise.",
+          keywords: ["engine", "webkit", "chromium", "safari", "drm", "netflix", "fairplay", "widevine"],
+        },
+        recommendedDefault: {
+          title: "Use Recommended Default",
+          description: "Chromium runs extensions and the ad blocker. Sites that need protected video can still open in WebKit.",
+          keywords: ["reset", "recommended", "chromium"],
+        },
+      },
+    },
+    {
+      section: "Website rules",
+      rows: {
+        websiteRules: {
+          title: "Website rules",
+          description: "Sites that always open in a chosen engine. Links opened from a page stay on that page's engine.",
+          keywords: ["opens in", "site engine", "rule", "webkit", "chromium"],
+        },
+      },
+    },
+    {
+      section: "How engines differ",
+      rows: {
+        separateData: {
+          title: "Separate sign-ins",
+          description: "Each engine keeps its own cookies and site data in every profile. Spaces, tabs, history and settings are shared.",
+          keywords: ["cookies", "site data", "sign in", "logged out"],
+        },
+        chromiumOnly: {
+          title: "Extensions and ad blocking are Chromium only",
+          description: "WebKit pages run without extensions or the ad blocker for now.",
+          keywords: ["extensions", "ad blocker", "ublock", "content blocker"],
+        },
+        passkeys: {
+          title: "Passkeys",
+          description: "WebKit pages can't use passkeys until Apple grants Ardia its browser passkey entitlement. Sign in with a passkey in Chromium meanwhile.",
+          keywords: ["passkey", "webauthn", "icloud keychain", "security key"],
+        },
+      },
+    },
+  ],
   advanced: [
     {
       section: "Browsing",
@@ -418,7 +501,7 @@ const ROWS: Record<SettingsPane, Section[]> = {
   ],
 };
 
-export type SettingEntry = Searchable & { pane: SettingsPane };
+export type SettingEntry = Searchable & { pane: SettingsPane; liquidGlassOnly?: true };
 
 const paneTitle = (pane: SettingsPane) => PANES.find((p) => p.id === pane)!.title;
 

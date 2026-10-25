@@ -1,3 +1,4 @@
+import type { PageEngine } from "@ardia/ardiacore";
 
 export type Frame = [number, number, number, number];
 
@@ -17,6 +18,7 @@ export type ThemeLook = {
   grain: number;
   texture: ThemeTexture;
   translucency: number;
+  angle?: number;
 };
 
 export type ProfileTheme = ThemeLook & {
@@ -73,6 +75,7 @@ export type Tab = {
   unloaded?: boolean;
   pinKey?: string;
   pageIn?: string;
+  engine?: PageEngine;
   createdAt: number;
   lastActiveAt: number;
 };
@@ -141,7 +144,7 @@ export type TabSnapshot = Pick<
   Tab,
   "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "profileId"
 > &
-  Partial<Pick<Tab, "pinnedUrl" | "pinnedAsRow" | "tileFolder">>;
+  Partial<Pick<Tab, "pinnedUrl" | "pinnedAsRow" | "tileFolder" | "engine">>;
 
 export type ClosedTab = {
   kind: "tab";

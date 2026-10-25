@@ -1,5 +1,5 @@
 import { showMenu, type MenuItem } from "@ardia/shell";
-import { closeTab, moveTabToProfile, moveTabToWindow, switchToTab, toggleMute } from "../../lib/actions";
+import { closeGroup, closeTab, moveTabToProfile, moveTabToWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { bookmarkProfileId, isIncognitoProfile, isPinnedRow, pinnedSectionTitle, pinSection, plural, tabLabel, togglePinTitle, viewTabIds, windowTitle } from "../../store/model";
@@ -28,6 +28,8 @@ import { setSidebarUi } from "./state";
 import { hasOwnGroupIcon } from "./TabIcon";
 import { newFolderWithTab, removeFromFolder } from "./tileFolderUi";
 import { toggleNewTabBar } from "../omnibox/newTabBar";
+import { togglePageEngine } from "../../lib/engines";
+import { canSwitchEngine, ENGINE_NAMES, ENGINE_SYMBOLS, otherEngine, tabEngine } from "../../store/engines";
 import { GROUP_COLORS, NEUTRAL_GROUP_SWATCH, nearestGroupColor } from "./tokens";
 
 const store = () => useBrowser.getState();
@@ -139,6 +141,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "share", title: "Share", symbol: "square.and.arrow.up", enabled: canShare(tab), share: true },
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
+    ...(canSwitchEngine(tab.url) ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[otherEngine(tabEngine(s, tab.id))]}`, symbol: ENGINE_SYMBOLS[otherEngine(tabEngine(s, tab.id))] }] : []),
     sep,
     { id: "moveToProfile", title: "Move to Profile", symbol: "person.crop.circle", enabled: !incognito, children: moveToProfile },
     { id: "moveToWindow", title: "Move to Window", symbol: "macwindow", enabled: !incognito, children: moveToWindowItems(windowId) },
@@ -169,6 +172,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice.startsWith("group:")) s.placeTabs([tab.id], { pinned: false, groupId: choice.slice(6) });
   else if (choice === "unsplit") s.removeTabFromSplit(tab.id);
   else if (choice === "mute") toggleMute(tab.id);
+  else if (choice === "engine") void togglePageEngine(tab.id);
   else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
   else if (choice.startsWith("share:via:")) void shareTab(tab, windowId, choice.slice(10));
@@ -283,7 +287,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   else if (choice === "copyMd") copyUrls(g.tabIds, true);
   else if (choice === "ungroup") s.ungroup(groupId);
   else if (choice === "bookmarkBar") s.moveGroupToBookmarksBar(groupId);
-  else if (choice === "close") s.closeGroup(groupId);
+  else if (choice === "close") void closeGroup(groupId);
   else if (choice === "delete") s.deleteGroup(groupId);
 }
 
