@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -14,7 +16,7 @@ registerHooks({
 });
 const { useBrowser } = await import("../store/browser.ts");
 const { docs } = await import("../test-native-stub.mjs");
-const { generateBrief, openDailyBrief, useDailyBriefs } = await import("./dailyBriefs.ts");
+const { generateBrief, loadDailyBrief, openDailyBrief, useDailyBriefs } = await import("./dailyBriefs.ts");
 const { localBriefDate } = await import("./briefDates.ts");
 const content = { summary: "Today", focus: { title: "Review", body: "Read your PR" }, todos: [], updates: [], events: [] };
 const setup = () => {
@@ -145,4 +147,93 @@ test("legacy update references match unique PR numbers or exact Gmail message id
   assert.equal(updates[1].source.url, gmail.url);
   assert.equal(updates[2].source, undefined);
   assert.equal(updates[3].source, undefined);
+});
+
+
+test("real provider url fields bind focus, todos and Gmail focus links", async () => {
+  setup();
+  const github = { title: "Fix sidebar clipping during live resize", url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" };
+  const gmail = { id: "abc123def456", subject: "Calendar permission review followup", url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" };
+  globalThis.briefCollect = async () => ({ github: [github], gmail: [gmail], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, summary: "Sunday, October 25: Review your calendar permissions.", focus: { title: "Mail", body: "Read", url: gmail.url }, todos: [{ title: "Prepare review", body: "Read", url: github.url }] });
+  await generateBrief("default", localBriefDate());
+  const generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.deepEqual(generated.focus.source, { kind: "gmail", url: gmail.url });
+  assert.deepEqual(generated.focus.links, [{ title: gmail.subject, url: gmail.url, kind: "gmail" }]);
+  assert.deepEqual(generated.todos[0].source, { kind: "github", url: github.url, project: "repo" });
+  assert.equal(generated.summary, "Review your calendar permissions.");
+});
+
+test("distinctive source titles recover omitted URLs without guessing unrelated or ambiguous sources", async () => {
+  setup();
+  const github = { title: "Fix sidebar clipping during live resize", url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" };
+  const gmail = { id: "abc123def456", subject: "Calendar permission review followup", url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" };
+  globalThis.briefCollect = async () => ({ github: [github], gmail: [gmail], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Check calendar permission followup", body: "Prepare the calendar permission review followup." }, todos: [{ title: "Fix sidebar clipping during live resize", body: "Check the implementation." }], updates: [{ title: "Review", body: "An unrelated change needs attention." }] });
+  await generateBrief("default", localBriefDate());
+  let generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.equal(generated.focus.source.url, gmail.url);
+  assert.equal(generated.focus.links[0].url, gmail.url);
+  assert.equal(generated.todos[0].source.url, github.url);
+  assert.equal(generated.updates[0].source, undefined);
+  globalThis.briefCollect = async () => ({ github: [github, { ...github, url: "https://github.com/other/repo/pull/43" }], gmail: [], calendar: [] });
+  await generateBrief("default", localBriefDate());
+  generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.equal(generated.todos[0].source, undefined);
+});
+
+
+test("legacy provider URLs bind all sections and survive loading the generated saved brief", async () => {
+  setup();
+  const context = {
+    github: [{ title: "Fix sidebar clipping during live resize", url: "https://github.com/ardia/browser/pull/42", repository: "ardia/browser" }],
+    gmail: [{ id: "abc123def456", subject: "Calendar permission review followup", url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" }],
+    calendar: [],
+  };
+  const raw = {
+    summary: "Sunday, October 25: Review your calendar permissions and prepare the sidebar fix. " + "Several additional updates need attention. ".repeat(5),
+    focus: { title: "Calendar permission review followup", body: "Read the latest email before replying.", url: context.gmail[0].url },
+    todos: [{ title: "Prepare sidebar fix", body: "Review the PR.", url: context.github[0].url }],
+    updates: [{ title: "Sidebar resize fix", body: "The change is ready for review.", url: context.github[0].url }, { title: "Calendar permission review followup", body: "A reply arrived.", url: context.gmail[0].url }],
+    events: [],
+  };
+  globalThis.briefCollect = async () => context;
+  globalThis.briefGenerate = async () => JSON.stringify(raw);
+  await generateBrief("default", localBriefDate());
+  const generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.equal(generated.focus.source.kind, "gmail");
+  assert.equal(generated.focus.links[0].kind, "gmail");
+  assert.equal(generated.todos[0].source.kind, "github");
+  assert.deepEqual(generated.updates.map((item) => item.source.kind), ["github", "gmail"]);
+  assert.ok(generated.summary.length <= 160);
+  assert.doesNotMatch(generated.summary, /October 25/);
+  useDailyBriefs.setState({ entries: {} });
+  loadDailyBrief("default", localBriefDate());
+  assert.deepEqual(useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content, generated);
+  if (process.env.ARDIA_SOURCE_AUDIT) {
+    mkdirSync(dirname(process.env.ARDIA_SOURCE_AUDIT), { recursive: true });
+    writeFileSync(process.env.ARDIA_SOURCE_AUDIT, JSON.stringify({ raw, context, generated }, null, 2));
+  }
+});
+
+
+test("matching GitHub and Gmail titles stay ambiguous across all source types", async () => {
+  setup();
+  const title = "Fix sidebar clipping during live resize";
+  const github = { title, url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" };
+  const gmail = { id: "abc123def456", subject: title, url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" };
+  globalThis.briefCollect = async () => ({ github: [github], gmail: [gmail], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title, body: "Ready to review." }, todos: [{ title, body: "Ready to review." }], updates: [{ title, body: "Ready to review." }] });
+  await generateBrief("default", localBriefDate());
+  let generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.equal(generated.focus.source, undefined);
+  assert.deepEqual(generated.focus.links, []);
+  assert.equal(generated.todos[0].source, undefined);
+  assert.equal(generated.updates[0].source, undefined);
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title, body: "Ready to review.", url: github.url }, updates: [{ title, body: "Ready to review.", url: gmail.url }] });
+  await generateBrief("default", localBriefDate());
+  generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.equal(generated.focus.source.url, github.url);
+  assert.deepEqual(generated.focus.links.map((link) => link.url), [github.url]);
+  assert.equal(generated.updates[0].source.url, gmail.url);
 });

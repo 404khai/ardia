@@ -4,7 +4,7 @@ import { BriefBadge } from "./BriefBadge";
 import { BriefSourceLink } from "./BriefSourceLink";
 import { useWindowId } from "../../store/hooks";
 import { registerBriefView } from "./devDriver";
-import type { BriefContent } from "../../lib/briefContent";
+import { briefSummary, type BriefContent } from "../../lib/briefContent";
 export type { BriefContent } from "../../lib/briefContent";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { briefArtworkForDate, briefDate } from "./assets";
@@ -24,7 +24,6 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
   const [previewWeekday, setPreviewWeekday] = useState<number | null>(null);
   const content = preview ? null : generatedContent;
   const [done, setDone] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [prep, setPrep] = useState(false);
   const day = briefDate(date);
   if (preview && previewWeekday !== null) day.setDate(day.getDate() - day.getDay() + previewWeekday);
@@ -45,7 +44,7 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
   const dateLabel = `${day.getDate()} ${day.toLocaleDateString("en-US", { month: "short" }).toUpperCase()} ${day.getFullYear()}`;
   const titleSize = contentWidth / (weekday.length > 8 ? 8.75 : weekday.length > 6 ? 8 : 7);
   const configure = () => onConfigure?.();
-  const summary = content?.summary.replace(/^\s*(?:(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),?\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s+\d{4})?\s*[:—–-]\s*/i, "");
+  const summary = content ? briefSummary(content.summary) : undefined;
 
   const updates: Array<BriefContent["updates"][number] & { project?: string }> = content ? content.updates : preview ? [
             { title: "Maintainer took over your PDF links security fix", body: "juliusmarminge self-assigned PR #18239 and is finishing the implementation against current main. Your contribution is being shipped.", project: "T3 Code" },
@@ -89,13 +88,11 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           <View style={styles.rightColumn}>
             <Text style={styles.itemTitle}>{content?.focus.title ?? (preview ? "Prepare for the iPad support review" : "Your day, brought together")}</Text>
             <Text style={styles.body}>{content?.focus.body ?? (preview ? "CodeRabbit is processing your 20-file iPad PR right now. In its last two monocode reviews, it flagged the Android SegmentedSwitch progress prop handling. Your iPad PR adds five new workspace sizing and layout components with a similar pattern. I can help you pre-address those files or draft fixes once the review lands." : "Choose a provider and connect the sources you want to include. Your brief will bring together the work that needs your attention, the updates worth knowing, and the shape of your day.")}</Text>
-            {expanded && preview && <Text style={styles.actionDetail}>Review preparation: check workspace sizing, layout behavior, and the progress prop before responding to review comments.</Text>}
-            {expanded && content && <Text style={styles.actionDetail}>Start with the next action in your brief, then check the original source for context.</Text>}
             {!preview && !content && <Pressable accessibilityRole="button" onPress={configure} style={styles.setupButton}><Text style={styles.setupButtonText}>Set up daily briefs →</Text></Pressable>}
           </View>
         </View>
-        <View style={{ position: "absolute", left: 21, bottom: -20, zIndex: 20 }}>
-          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content?.focus.links} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? () => setExpanded(!expanded) : configure} />
+        <View style={{ position: "absolute", left: 21, bottom: -26, zIndex: 20 }}>
+          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content?.focus.links} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? undefined : configure} />
         </View>
         </View>
         <View style={[styles.section, { flexDirection: wide ? "row" : "column" }]}>
@@ -137,7 +134,10 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
 function TodoItems({ items }: { items: BriefContent["todos"] }) {
   const [completed, setCompleted] = useState<Set<number>>(() => new Set());
   if (!items.length) return <Text style={styles.body}>Nothing urgent. Make room for your own priorities.</Text>;
-  return <>{items.map((item, i) => <Pressable key={i} accessibilityRole="checkbox" accessibilityState={{ checked: completed.has(i) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(i)) next.delete(i); else next.add(i); return next; })} style={{ flexDirection: "row", gap: 14, marginBottom: 22 }}><View style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(i) ? "#ffe500" : "#53534f", backgroundColor: completed.has(i) ? "#ffe500" : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(i) && <Text style={styles.checkmark}>✓</Text>}</View><View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(i) && { textDecorationLine: "line-through", color: "#77756e" }]}>{item.title}</Text><Text style={styles.body}>{item.body}</Text></View></Pressable>)}</>;
+  return <>{items.map((item, i) => <View key={i} style={{ flexDirection: "row", gap: 14, marginBottom: 22 }}>
+    <Pressable accessibilityRole="checkbox" accessibilityLabel={item.title} accessibilityState={{ checked: completed.has(i) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(i)) next.delete(i); else next.add(i); return next; })} style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(i) ? "#ffe500" : "#53534f", backgroundColor: completed.has(i) ? "#ffe500" : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(i) && <Text style={styles.checkmark}>✓</Text>}</Pressable>
+    <View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(i) && { textDecorationLine: "line-through", color: "#77756e" }]}>{item.title}</Text><Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text></View>
+  </View>)}</>;
 }
 
 const styles = StyleSheet.create({

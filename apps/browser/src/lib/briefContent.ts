@@ -1,6 +1,6 @@
 export type BriefSource = { kind: "github" | "gmail"; url: string; project?: string };
 export type BriefItem = { title: string; body: string; source?: BriefSource };
-export type BriefLink = { title: string; url: string };
+export type BriefLink = { title: string; url: string; kind?: "github" | "gmail" };
 export type BriefContent = { summary: string; focus: BriefItem & { links?: BriefLink[] }; todos: BriefItem[]; updates: BriefItem[]; events: (BriefItem & { time: string })[] };
 
 function briefSource(value: unknown): BriefSource | undefined {
@@ -35,7 +35,7 @@ export function parseBriefContent(raw: string): BriefContent {
   const item = (value: unknown): BriefItem => {
     if (!value || typeof value !== "object") throw new Error("The provider returned an invalid brief. Try again.");
     const v = value as Record<string, unknown>;
-    const source = briefSource(v.sourceUrl ?? v.source);
+    const source = briefSource(v.sourceUrl ?? v.source ?? v.url);
     return { title: text(v.title, 240), body: text(v.body, 2400), ...(source ? { source } : {}) };
   };
   const items = (value: unknown): BriefItem[] => {
@@ -48,27 +48,47 @@ export function parseBriefContent(raw: string): BriefContent {
   if (Array.isArray(sources)) {
     focus.links = sources.slice(0, 5).flatMap((source: unknown) => {
       const value = typeof source === "string" ? { url: source, title: source } : source && typeof source === "object" ? source as Record<string, unknown> : null;
-      if (!value || typeof value.url !== "string" || !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(value.url)) return [];
-      return [{ url: value.url, title: typeof value.title === "string" ? value.title.slice(0, 240) : value.url }];
+      const bound = briefSource(value);
+      if (!value || !bound) return [];
+      return [{ url: bound.url, title: typeof value.title === "string" ? value.title.slice(0, 240) : bound.url, ...(bound.kind === "gmail" ? { kind: bound.kind } : {}) }];
     });
   }
   return { summary: text(content.summary, 600), focus, todos: items(content.todos), updates: items(content.updates), events: content.events.slice(0, 20).map((event: Record<string, unknown>) => ({ ...item(event), time: text(event.time, 80) })) };
 }
 
-export function focusBriefLinks(focus: BriefContent["focus"], candidates: BriefLink[]): BriefLink[] {
-  const requested = new Set(focus.links?.map((link) => link.url));
-  const description = `${focus.title} ${focus.body}`;
-  const mentionedUrls = new Set(description.match(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*/g) ?? []);
-  const numbers = [...description.matchAll(/(?:\bPR\s*|pull request\s*)#?(\d+)\b/gi)].map((match) => match[1]);
-  return candidates.filter((candidate) => {
-    if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(candidate.url)) return false;
-    if (requested.has(candidate.url) || mentionedUrls.has(candidate.url)) return true;
-    const number = candidate.url.split("/").at(-1)!;
-    return numbers.includes(number) && candidates.filter((other) => other.url.split("/").at(-1) === number).length === 1;
-  }).filter((candidate, index, all) => all.findIndex((other) => other.url === candidate.url) === index).slice(0, 5).map(({ title, url }) => ({ title: title.slice(0, 240), url }));
+function sourceTitleMatches(item: BriefItem, title: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const description = normalize(`${item.title} ${item.body}`);
+  const normalized = normalize(title);
+  const ignored = new Set(["the", "and", "for", "with", "from", "your", "this", "that", "into", "pull", "request", "update", "review", "gmail", "message", "email", "notification"]);
+  const tokens = [...new Set(normalized.split(" ").filter((token) => token.length >= 3 && !ignored.has(token)))];
+  if (normalized.length >= 12 && tokens.length >= 2 && description.includes(normalized)) return true;
+  const words = new Set(description.split(" "));
+  const matches = tokens.filter((token) => words.has(token)).length;
+  return tokens.length >= 3 && matches >= 3 && matches / tokens.length >= 0.8;
 }
 
-export function updateBriefSource(item: BriefItem, github: (BriefLink & { repository?: string })[], gmail: { id: string; url?: string }[]): BriefSource | undefined {
+export function focusBriefLinks(focus: BriefContent["focus"], candidates: BriefLink[], matchTitles = true): BriefLink[] {
+  const requested = new Set([...(focus.links?.map((link) => link.url) ?? []), ...(focus.source ? [focus.source.url] : [])]);
+  const description = `${focus.title} ${focus.body}`;
+  const mentionedUrls = new Set(description.match(/https:\/\/(?:github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*|mail\.google\.com\/mail\/u\/(?:0\/|\?authuser=[^&#\s]+)#all\/[a-fA-F0-9]+)/g) ?? []);
+  const numbers = [...description.matchAll(/(?:\bPR\s*|pull request\s*)#?(\d+)\b/gi)].map((match) => match[1]);
+  const explicit = candidates.filter((candidate) => {
+    const source = briefSource(candidate.url);
+    if (!source) return false;
+    if (requested.has(candidate.url) || mentionedUrls.has(candidate.url)) return true;
+    if (source.kind === "github") {
+      const number = candidate.url.split("/").at(-1)!;
+      if (numbers.includes(number) && candidates.filter((other) => other.url.split("/").at(-1) === number).length === 1) return true;
+    }
+    return false;
+  });
+  const titled = matchTitles && !explicit.length ? candidates.filter((candidate) => !!briefSource(candidate.url) && sourceTitleMatches(focus, candidate.title)) : [];
+  const matched = explicit.length ? explicit : titled.length === 1 ? titled : [];
+  return matched.filter((candidate, index, all) => all.findIndex((other) => other.url === candidate.url) === index).slice(0, 5).map(({ title, url, kind }) => ({ title: title.slice(0, 240), url, ...(kind ? { kind } : {}) }));
+}
+
+export function updateBriefSource(item: BriefItem, github: (BriefLink & { repository?: string })[], gmail: { id: string; url?: string; subject?: string }[]): BriefSource | undefined {
   const candidates: BriefSource[] = [
     ...github.flatMap(({ url, repository }) => {
       const source = briefSource(url);
@@ -80,11 +100,22 @@ export function updateBriefSource(item: BriefItem, github: (BriefLink & { reposi
     }),
   ];
   if (item.source) return candidates.find((source) => source.url === item.source?.url);
-  const referencedGithub = focusBriefLinks(item, github);
+  const referencedGithub = focusBriefLinks(item, github, false);
   const description = `${item.title} ${item.body}`;
   const mentionedUrls = new Set(description.match(/https:\/\/mail\.google\.com\/mail\/u\/(?:0\/|\?authuser=[^&#\s]+)#all\/[a-fA-F0-9]+/g) ?? []);
   const referencedGmail = gmail.filter(({ id, url }) => !!url && (mentionedUrls.has(url) || /^[a-fA-F0-9]{10,128}$/.test(id) && new RegExp(`(^|[^a-zA-Z0-9])${id}([^a-zA-Z0-9]|$)`).test(description))).map(({ url }) => url);
   const mentioned = new Set([...referencedGithub.map(({ url }) => url), ...referencedGmail]);
   const matches = candidates.filter(({ url }) => mentioned.has(url));
-  return matches.length === 1 ? matches[0] : undefined;
+  if (matches.length) return matches.length === 1 ? matches[0] : undefined;
+  const titles = [...github.map(({ title, url }) => ({ title, url })), ...gmail.map(({ subject, url }) => ({ title: subject ?? "", url }))];
+  const titled = candidates.filter((candidate) => titles.some(({ title, url }) => url === candidate.url && sourceTitleMatches(item, title)));
+  return titled.length === 1 ? titled[0] : undefined;
+}
+
+export function briefSummary(value: string): string {
+  const text = value.replace(/^\s*(?:(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),?\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s+\d{4})?\s*[:—–-]\s*/i, "").replace(/\s+/g, " ").trim();
+  const sentences = (text.match(/.*?[.!?](?=\s+[A-Z]|$)|.+$/g) ?? []).slice(0, 2).map((sentence) => sentence.trim()).join(" ").trim();
+  if (sentences.length <= 160) return sentences;
+  const boundary = sentences.slice(0, 160).lastIndexOf(" ");
+  return `${sentences.slice(0, boundary > 100 ? boundary : 159).replace(/[,:;—–-]+$/, "").trimEnd()}…`;
 }

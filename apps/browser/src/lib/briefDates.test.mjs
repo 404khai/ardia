@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { briefDateFromUrl, briefDue, localBriefDate, parseBriefDate } from "./briefDates.ts";
-import { gmailBriefUrl, isSafeBriefSource, parseBriefContent } from "./briefContent.ts";
+import { briefSummary, gmailBriefUrl, isSafeBriefSource, parseBriefContent } from "./briefContent.ts";
 
 const settings = { dailyBriefEnabled: true, dailyBriefTime: "08:00", dailyBriefDelivery: "scheduled", dailyBriefLastOpened: "" };
 
@@ -82,4 +82,22 @@ test("Gmail links select the connected account and reject extra query parameters
   assert.equal(gmailBriefUrl("person@example.com", "../../bad"), undefined);
   const content = { summary: "Summary", focus: { title: "Focus", body: "Body" }, todos: [], updates: [{ title: "Mail", body: "Read", source: { kind: "gmail", url } }], events: [] };
   assert.deepEqual(parseBriefContent(JSON.stringify(content)), content);
+});
+
+
+test("legacy item urls and Gmail focus links survive parsing", () => {
+  const url = gmailBriefUrl("person@example.com", "abc123def456");
+  const parsed = parseBriefContent(JSON.stringify({ summary: "Summary", focus: { title: "Mail", body: "Read", url, sourceUrls: [url] }, todos: [{ title: "Mail", body: "Read", url }], updates: [], events: [] }));
+  assert.deepEqual(parsed.focus.source, { kind: "gmail", url });
+  assert.deepEqual(parsed.focus.links, [{ title: url, url, kind: "gmail" }]);
+  assert.deepEqual(parsed.todos[0].source, { kind: "gmail", url });
+});
+
+test("brief summaries omit the repeated date and stay short at word boundaries", () => {
+  assert.equal(briefSummary("Sunday, October 25: No meetings. Review your PR."), "No meetings. Review your PR.");
+  assert.equal(briefSummary("October 25, 2026 — Clear your inbox."), "Clear your inbox.");
+  assert.equal(briefSummary("First sentence. Second sentence. Third sentence."), "First sentence. Second sentence.");
+  const text = briefSummary("Review the " + "important changes ".repeat(20));
+  assert.ok(text.length <= 160);
+  assert.match(text, /(?:changes|important)…$/);
 });

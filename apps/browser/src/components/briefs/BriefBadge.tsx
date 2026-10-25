@@ -1,24 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Linking, Pressable, Text, View } from "react-native";
+import { isSafeBriefSource, type BriefLink } from "../../lib/briefContent";
 
-type BriefLink = { title: string; url: string };
-type Props = { title: string; onPress: () => void; small?: boolean; links?: BriefLink[]; maxWidth?: number };
+type Props = { title: string; onPress?: () => void; small?: boolean; links?: BriefLink[]; maxWidth?: number };
 
 const rotations = [0, 22.5, 45, 67.5];
-const validLink = (link: BriefLink) => /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*\/?$/.test(link.url);
+const linkKind = (link: BriefLink) => link.kind ?? (link.url.startsWith("https://github.com/") ? "github" : "gmail");
+const validLink = (link: BriefLink) => isSafeBriefSource({ kind: linkKind(link), url: link.url });
 
 export function BriefBadge({ title, onPress, small = false, links = [], maxWidth = 330 }: Props) {
   const size = small ? 84 : 108;
   const face = size * 0.76;
   const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const tilt = useRef(new Animated.Value(0)).current;
   const sheen = useRef(new Animated.Value(-size)).current;
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const references = links.filter(validLink).slice(0, 5);
+  const showPopup = !small && (references.length > 0 || !onPress) && !dismissed && (hovered || pinned);
+  const press = () => {
+    if (references.length > 0 || (!small && !onPress)) {
+      setDismissed(pinned);
+      setPinned(!pinned);
+      return;
+    }
+    onPress?.();
+  };
   const enter = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = null;
     setHovered(true);
+    setDismissed(false);
   };
   const leave = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -36,18 +49,22 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
     sheen.stopAnimation();
   }, [sheen, tilt]);
   return (
-    <View style={{ width: size, height: size, zIndex: hovered ? 30 : 1 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={title.replace("\n", " ")} onPress={onPress} onHoverIn={enter} onHoverOut={leave} style={({ pressed }) => ({ width: size, height: size, opacity: pressed ? 0.75 : 1 })}>
+    <View style={{ width: size, height: size, zIndex: hovered || showPopup ? 30 : 1 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={title.replace("\n", " ")} onPress={press} onHoverIn={enter} onHoverOut={leave} style={({ pressed }) => ({ width: size, height: size, opacity: pressed ? 0.75 : 1 })}>
         <Animated.View pointerEvents="none" style={{ width: size, height: size, alignItems: "center", justifyContent: "center", transform: [{ rotate: tilt.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-8deg"] }) }] }}>
           {rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, backgroundColor: "#ffe500", transform: [{ rotate: `${rotation}deg` }] }} />)}
           {hovered && rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, overflow: "hidden", transform: [{ rotate: `${rotation}deg` }] }}><View style={{ position: "absolute", width: size, height: size, left: (face - size) / 2, top: (face - size) / 2, transform: [{ rotate: `${-rotation}deg` }] }}><Animated.View style={{ position: "absolute", width: size * 0.25, height: size * 2, top: -size / 2, left: size / 2, backgroundColor: "rgba(255,255,255,0.12)", transform: [{ translateX: sheen }, { rotate: "-22deg" }] }} /></View></View>)}
           <Text style={{ color: "#101010", fontFamily: "Georgia", fontStyle: "italic", fontSize: small ? 15 : 22, textAlign: "center", lineHeight: small ? 20 : 27, transform: [{ rotate: "-9deg" }] }}>{title}</Text>
         </Animated.View>
       </Pressable>
-      {hovered && references.length > 0 && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", top: size + 12, left: -8, width: Math.max(160, Math.min(330, maxWidth)), padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
-        <Text style={{ color: "#eeeeeb", fontFamily: "Georgia", fontSize: 16 }}>Push this work forward</Text>
-        <Text style={{ color: "#bbb7b0", fontSize: 13, lineHeight: 19 }}>Open the pull requests behind this recommendation.</Text>
-        {references.map((link) => <Pressable key={link.url} accessibilityRole="link" accessibilityLabel={link.title} onPress={() => void Linking.openURL(link.url).catch(() => {})} style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 5, opacity: pressed ? 0.75 : 1 })}><Image source={require("../../../assets/site-icons/github.png")} style={{ width: 17, height: 17, tintColor: "#eeeeeb" }} resizeMode="contain" /><Text style={{ flex: 1, color: "#eeeeeb", fontSize: 13, lineHeight: 19 }}>{link.title}</Text></Pressable>)}
+      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", top: size + 12, left: -8, width: Math.max(160, Math.min(330, maxWidth)), padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
+        <Text style={{ color: "#eeeeeb", fontFamily: "Georgia", fontSize: 16 }}>Sources for this recommendation</Text>
+        <Text style={{ color: "#bbb7b0", fontSize: 13, lineHeight: 19 }}>{references.length ? "Open the sources behind this recommendation." : "Refresh this brief to load its source links."}</Text>
+        {references.map((link) => {
+          const kind = linkKind(link);
+          const service = kind === "github" ? "GitHub" : "Gmail";
+          return <Pressable key={link.url} accessibilityRole="link" accessibilityLabel={link.title} tooltip={`Open in ${service}`} onPress={(event) => { event.stopPropagation(); void Linking.openURL(link.url).catch(() => {}); }} style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 5, opacity: pressed ? 0.75 : 1 })}><Image source={kind === "github" ? require("../../../assets/site-icons/github.png") : require("../../../assets/site-icons/gmail.png")} style={{ width: 17, height: 17, ...(kind === "github" ? { tintColor: "#eeeeeb" } : {}) }} resizeMode="contain" /><Text style={{ flex: 1, color: "#eeeeeb", fontSize: 13, lineHeight: 19 }}>{link.title}</Text></Pressable>;
+        })}
       </Pressable>}
     </View>
   );
