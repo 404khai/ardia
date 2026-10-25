@@ -82,3 +82,67 @@ test("private generation never reads sources or calls the provider", async () =>
   assert.equal(calls, 0);
   assert.equal(docs.has("daily-briefs.json"), false);
 });
+
+test("focus links bind provider references to real GitHub context titles and URLs", async () => {
+  setup();
+  const trusted = { title: "Actual PR title", url: "https://github.com/owner/repo/pull/42" };
+  globalThis.briefCollect = async () => ({ github: [trusted], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Review", body: "Review code", sourceUrls: [trusted.url, "https://github.com/owner/repo/pull/999"] } });
+  await generateBrief("default", localBriefDate());
+  const entry = useDailyBriefs.getState().entries[`default/${localBriefDate()}`];
+  assert.deepEqual(entry.content.focus.links, [trusted]);
+  assert.deepEqual(JSON.parse(docs.get("daily-briefs.json"))[`default/${localBriefDate()}`].focus.links, [trusted]);
+});
+
+test("focus PR-number fallback only links a unique matching source", async () => {
+  setup();
+  const trusted = { title: "Actual PR title", url: "https://github.com/owner/repo/pull/42" };
+  globalThis.briefCollect = async () => ({ github: [trusted], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Prepare PR #42", body: "Review code" } });
+  await generateBrief("default", localBriefDate());
+  assert.deepEqual(useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.focus.links, [trusted]);
+  globalThis.briefCollect = async () => ({ github: [trusted, { title: "Different PR", url: "https://github.com/other/repo/pull/42" }], calendar: [] });
+  await generateBrief("default", localBriefDate());
+  assert.deepEqual(useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.focus.links, []);
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Review", body: "https://github.com/owner/repo/pull/420" } });
+  await generateBrief("default", localBriefDate());
+  assert.deepEqual(useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.focus.links, []);
+});
+
+test("update source metadata comes from real collected PRs and Gmail messages", async () => {
+  setup();
+  const github = { title: "Actual PR", url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" };
+  const gmail = { id: "abc123def456", url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" };
+  globalThis.briefCollect = async () => ({ github: [github], gmail: [gmail], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, updates: [
+    { title: "Code update", body: "Review", source: { kind: "gmail", url: github.url, project: "Invented project" } },
+    { title: "Email update", body: "Read", sourceUrl: gmail.url },
+    { title: "Invented reference", body: "Read", sourceUrl: "https://github.com/owner/repo/pull/999" },
+    { title: "No source", body: "Nothing matching" },
+  ] });
+  await generateBrief("default", localBriefDate());
+  const updates = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.updates;
+  assert.deepEqual(updates[0].source, { kind: "github", url: github.url, project: "repo" });
+  assert.deepEqual(updates[1].source, { kind: "gmail", url: gmail.url });
+  assert.equal(updates[2].source, undefined);
+  assert.equal(updates[3].source, undefined);
+});
+
+test("legacy update references match unique PR numbers or exact Gmail message identifiers", async () => {
+  setup();
+  const github = { title: "Actual PR", url: "https://github.com/owner/repo/pull/42", repository: "owner/repo" };
+  const gmail = { id: "abc123def456", url: "https://mail.google.com/mail/u/?authuser=second%40example.com#all/abc123def456" };
+  globalThis.briefCollect = async () => ({ github: [github], gmail: [gmail], calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, updates: [
+    { title: "PR #42 updated", body: "Review" },
+    { title: "Email update", body: "Message abc123def456 needs attention" },
+    { title: "Email update", body: "Message abc123def4567 is different" },
+    { title: "Mixed update PR #42", body: "Message abc123def456" },
+  ] });
+  await generateBrief("default", localBriefDate());
+  const updates = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content.updates;
+  assert.equal(updates[0].source.url, github.url);
+  assert.equal(updates[1].source.url, gmail.url);
+  assert.equal(updates[2].source, undefined);
+  assert.equal(updates[3].source, undefined);
+});

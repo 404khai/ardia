@@ -37,8 +37,8 @@ export function startDevHarness() {
     get checkIn(): typeof import("./defaultBrowserCheckIn") {
       return require("./defaultBrowserCheckIn");
     },
-    get briefs(): typeof import("./dailyBriefs") & typeof import("./briefDates") {
-      return { ...require("./dailyBriefs"), ...require("./briefDates") };
+    get briefs(): typeof import("./dailyBriefs") & typeof import("./briefDates") & typeof import("../components/briefs/devDriver") {
+      return { ...require("./dailyBriefs"), ...require("./briefDates"), ...require("../components/briefs/devDriver") };
     },
     get media(): typeof import("../components/media/state").useMedia {
       return require("../components/media/state").useMedia;

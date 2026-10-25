@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { briefDateFromUrl, briefDue, localBriefDate, parseBriefDate } from "./briefDates.ts";
-import { parseBriefContent } from "./briefContent.ts";
+import { gmailBriefUrl, isSafeBriefSource, parseBriefContent } from "./briefContent.ts";
 
 const settings = { dailyBriefEnabled: true, dailyBriefTime: "08:00", dailyBriefDelivery: "scheduled", dailyBriefLastOpened: "" };
 
@@ -34,4 +34,52 @@ test("provider output is validated, bounded and rendered as plain text", () => {
   assert.throws(() => parseBriefContent("not json"));
   assert.equal(parseBriefContent(JSON.stringify({ ...content, summary: "a".repeat(1000) })).summary.length, 600);
   assert.equal(parseBriefContent(JSON.stringify({ ...content, todos: Array(100).fill(content.focus) })).todos.length, 12);
+});
+
+test("focus links reject external hosts, credentials and URL suffixes while preserving saved briefs", () => {
+  const content = { summary: "Summary", focus: { title: "Review", body: "Review sources" }, todos: [], updates: [], events: [] };
+  const safe = "https://github.com/owner/repo/pull/42";
+  const sourceUrls = ["https://evil.example/owner/repo/pull/42", "https://user:secret@github.com/owner/repo/pull/42", `${safe}?token=secret`, `${safe}#discussion`, "javascript:alert(1)"];
+  for (const invalid of sourceUrls) {
+    const parsed = parseBriefContent(JSON.stringify({ ...content, focus: { ...content.focus, sourceUrls: [invalid, safe] } }));
+    assert.deepEqual(parsed.focus.links, [{ title: safe, url: safe }]);
+  }
+  const accepted = parseBriefContent(JSON.stringify({ ...content, focus: { ...content.focus, sourceUrls: [safe] } }));
+  assert.deepEqual(accepted.focus.links, [{ title: safe, url: safe }]);
+  assert.deepEqual(parseBriefContent(JSON.stringify(accepted)), accepted);
+  assert.deepEqual(parseBriefContent(JSON.stringify(content)), content);
+});
+
+test("update sources only retain exact GitHub PR and Gmail message links", () => {
+  const base = { summary: "Summary", focus: { title: "Focus", body: "Body" }, todos: [], updates: [], events: [] };
+  const safe = [{ kind: "github", url: "https://github.com/owner/repo/pull/42", project: "repo" }, { kind: "gmail", url: "https://mail.google.com/mail/u/0/#all/abc123def456" }];
+  for (const source of safe) {
+    const content = { ...base, updates: [{ title: "Update", body: "Body", source }] };
+    assert.deepEqual(parseBriefContent(JSON.stringify(content)), content);
+  }
+  for (const sourceUrl of ["https://evil.example/mail/u/0/#all/abc123", "https://user:secret@mail.google.com/mail/u/0/#all/abc123", "https://mail.google.com/mail/u/0/#all/abc123?token=secret", "https://github.com/owner/repo/pull/42#discussion", "https://mail.google.com/mail/u/0/#all/../../evil"]) {
+    const parsed = parseBriefContent(JSON.stringify({ ...base, updates: [{ title: "Update", body: "Body", sourceUrl }] }));
+    assert.deepEqual(parsed.updates, [{ title: "Update", body: "Body" }]);
+  }
+});
+
+
+test("Gmail links select the connected account and reject extra query parameters", () => {
+  const url = gmailBriefUrl("second+brief@example.com", "abc123def456");
+  assert.equal(url, "https://mail.google.com/mail/u/?authuser=second%2Bbrief%40example.com#all/abc123def456");
+  assert.equal(isSafeBriefSource({ kind: "gmail", url }), true);
+  assert.equal(isSafeBriefSource({ kind: "gmail", url: "https://mail.google.com/mail/u/0/#all/abc123def456" }), true);
+  for (const invalid of [
+    url.replace("#all", "&redirect=https://evil.example#all"),
+    url.replace("authuser=", "authuser=other%40example.com&authuser="),
+    url.replace("second%2Bbrief%40example.com", "not-an-email"),
+    url.replace("second%2Bbrief%40example.com", "%ZZ"),
+    url.replace("mail.google.com", "user:secret@mail.google.com"),
+    url.replace("#all", "#inbox"),
+    url + "?token=secret",
+  ]) assert.equal(isSafeBriefSource({ kind: "gmail", url: invalid }), false);
+  assert.equal(gmailBriefUrl(undefined, "abc123"), undefined);
+  assert.equal(gmailBriefUrl("person@example.com", "../../bad"), undefined);
+  const content = { summary: "Summary", focus: { title: "Focus", body: "Body" }, todos: [], updates: [{ title: "Mail", body: "Read", source: { kind: "gmail", url } }], events: [] };
+  assert.deepEqual(parseBriefContent(JSON.stringify(content)), content);
 });

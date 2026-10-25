@@ -1,34 +1,24 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { BriefRail } from "@ardia/shell";
+import { BriefBadge } from "./BriefBadge";
+import { BriefSourceLink } from "./BriefSourceLink";
+import { useWindowId } from "../../store/hooks";
+import { registerBriefView } from "./devDriver";
+import type { BriefContent } from "../../lib/briefContent";
+export type { BriefContent } from "../../lib/briefContent";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { briefArtworkForDate, briefDate } from "./assets";
 import { localBriefDate } from "../../lib/briefDates";
 
-export type BriefContent = {
-  summary: string;
-  focus: { title: string; body: string };
-  todos: Array<{ title: string; body: string }>;
-  updates: Array<{ title: string; body: string }>;
-  events: Array<{ title: string; body: string; time: string }>;
-};
-
 type Props = { date?: string; onConfigure?: () => void; content?: BriefContent | null; loading?: boolean; error?: string | null; onGenerate?: () => void };
-
-function Starburst({ title, onPress, small = false }: { title: string; onPress: () => void; small?: boolean }) {
-  const size = small ? 84 : 96;
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={title.replace("\n", " ")} onPress={onPress} style={({ pressed }) => ({ width: size, height: size, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 })}>
-      {[0, 22.5, 45, 67.5].map((rotation) => <View key={rotation} pointerEvents="none" style={{ position: "absolute", width: size * 0.76, height: size * 0.76, backgroundColor: "#ffe500", transform: [{ rotate: `${rotation}deg` }] }} />)}
-      <Text style={{ color: "#101010", fontFamily: "Georgia", fontStyle: "italic", fontSize: small ? 15 : 21, textAlign: "center", lineHeight: small ? 20 : 26, transform: [{ rotate: "-9deg" }] }}>{title}</Text>
-    </Pressable>
-  );
-}
 
 function SectionTitle({ children }: { children: string }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
 export function DailyBriefPage({ date, onConfigure, content: generatedContent, loading = false, error, onGenerate }: Props) {
+  const windowId = useWindowId();
+  const registerScroll = useCallback((view: ScrollView | null) => { if (__DEV__) registerBriefView(windowId, view); }, [windowId]);
   const [width, setWidth] = useState(1100);
   const [preview, setPreview] = useState(false);
   const [previewWeekday, setPreviewWeekday] = useState<number | null>(null);
@@ -55,9 +45,15 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
   const dateLabel = `${day.getDate()} ${day.toLocaleDateString("en-US", { month: "short" }).toUpperCase()} ${day.getFullYear()}`;
   const titleSize = contentWidth / (weekday.length > 8 ? 8.75 : weekday.length > 6 ? 8 : 7);
   const configure = () => onConfigure?.();
+  const summary = content?.summary.replace(/^\s*(?:(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),?\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s+\d{4})?\s*[:—–-]\s*/i, "");
+
+  const updates: Array<BriefContent["updates"][number] & { project?: string }> = content ? content.updates : preview ? [
+            { title: "Maintainer took over your PDF links security fix", body: "juliusmarminge self-assigned PR #18239 and is finishing the implementation against current main. Your contribution is being shipped.", project: "T3 Code" },
+            { title: "Three PRs merged in two days", body: "hardbeat920 merged sidebar swipe navigation, Android header pill fix, and Android composer repair. Commented ‘this is great! thank you.’", project: "Monocode" },
+          ] : [];
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.scroll} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} testID="daily-brief-page">
+    <ScrollView ref={registerScroll} style={styles.root} contentContainerStyle={styles.scroll} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} testID="daily-brief-page">
       <View style={{ width, alignSelf: "center" }}>
         <View style={[styles.masthead, { width: contentWidth, alignSelf: "center" }]}>
           <Image source={require("../../../assets/briefs/ardia-mark.png")} style={styles.mastheadLogo} resizeMode="contain" accessibilityLabel="Ardia" />
@@ -79,18 +75,16 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           </>}
         </View>
         <View style={{ width: contentWidth, alignSelf: "center" }}>
-        <View style={[styles.captionRow, !wide && { flexDirection: "column", gap: 8 }]}>
-          <Text style={styles.caption}>{content?.summary ?? (preview ? "Nothing until a quick 15-minute call at noon. The morning is all yours." : "A little perspective. A clearer day. A brief made for you.")}</Text>
-          <Text style={styles.artCredit}>{artwork.title}, {artwork.artist}, {artwork.year}</Text>
+        <View style={styles.captionRow}>
+          <Text style={styles.caption}>{summary ?? (preview ? "Nothing until a quick 15-minute call at noon. The morning is all yours." : "A little perspective. A clearer day. A brief made for you.")}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.artCredit, { width: Math.min(contentWidth * 0.55, `${artwork.title}, ${artwork.artist}, ${artwork.year}`.length * 4.9) }]}>{artwork.title}, {artwork.artist}, {artwork.year}</Text>
         </View>
         {onGenerate && !preview && <View style={styles.generateRow}><Pressable accessibilityRole="button" disabled={loading} onPress={onGenerate} style={({ pressed }) => [styles.generateButton, { opacity: loading || pressed ? 0.5 : 1 }]}><Text style={styles.setupButtonText}>{loading ? "Preparing your brief…" : content ? "Refresh brief →" : "Generate brief →"}</Text></Pressable></View>}
         {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+        <View style={styles.featureWrap}>
         <View style={[styles.feature, { flexDirection: wide ? "row" : "column" }]}>
           <View style={wide ? styles.leftColumn : { marginBottom: 22 }}>
             <SectionTitle>Push your work forward</SectionTitle>
-            <View style={{ marginTop: 53, marginBottom: -43, marginLeft: -7 }}>
-              <Starburst title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} onPress={content || preview ? () => setExpanded(!expanded) : configure} />
-            </View>
           </View>
           <View style={styles.rightColumn}>
             <Text style={styles.itemTitle}>{content?.focus.title ?? (preview ? "Prepare for the iPad support review" : "Your day, brought together")}</Text>
@@ -99,6 +93,10 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
             {expanded && content && <Text style={styles.actionDetail}>Start with the next action in your brief, then check the original source for context.</Text>}
             {!preview && !content && <Pressable accessibilityRole="button" onPress={configure} style={styles.setupButton}><Text style={styles.setupButtonText}>Set up daily briefs →</Text></Pressable>}
           </View>
+        </View>
+        <View style={{ position: "absolute", left: 21, bottom: -20, zIndex: 20 }}>
+          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content?.focus.links} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? () => setExpanded(!expanded) : configure} />
+        </View>
         </View>
         <View style={[styles.section, { flexDirection: wide ? "row" : "column" }]}>
           <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Top to-dos</SectionTitle></View>
@@ -109,15 +107,23 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
             </Pressable> : <><Text style={styles.itemTitle}>Room for what matters</Text><Text style={styles.body}>Action items from your connected sources will appear here. Nothing is read until you give permission.</Text></>}
           </View>
         </View>
-        <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 62 }]}>
-          <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>New updates</SectionTitle>{preview && !content && <Text style={styles.number}>01</Text>}</View>
-          <View style={styles.rightColumn}>{content ? content.updates.length ? content.updates.map((item, i) => <View key={i} style={{ marginBottom: 28 }}><Text style={styles.itemTitle}>{item.title}</Text><Text style={styles.body}>{item.body}</Text></View>) : <Text style={styles.body}>Nothing new needs your attention.</Text> : <><Text style={styles.itemTitle}>{preview ? "Maintainer took over your PDF links security fix" : "Less catching up. More getting going."}{preview && <Text style={styles.project}>  T3 Code</Text>}</Text><Text style={styles.body}>{preview ? "juliusmarminge self-assigned PR #18239 and is finishing the implementation against current main. Your contribution is being shipped." : "The important updates from Gmail and GitHub will be gathered into one calm place."}</Text></>}</View>
+        <View style={[styles.section, { marginTop: 62 }]}>
+          <SectionTitle>New updates</SectionTitle>
+          {updates.map((item, index) => <View key={index} style={{ flexDirection: "row", marginTop: index === 0 ? 28 : 34 }}>
+            <View style={wide ? styles.leftColumn : { width: 35 }}><Text style={[styles.number, { marginTop: 2 }]}>{String(index + 1).padStart(2, "0")}</Text></View>
+            <View style={styles.rightColumn}>
+              <Text style={styles.itemTitle}>{item.title}{(item.source?.project || item.project) ? <Text style={styles.project}>  {item.source?.project ?? item.project}</Text> : null}</Text>
+              <Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text>
+            </View>
+          </View>)}
+          {content && !content.updates.length && <Text style={[styles.body, { marginTop: 28 }]}>Nothing new needs your attention.</Text>}
+          {!content && !preview && <Text style={[styles.body, { marginTop: 28 }]}>The important updates from Gmail and GitHub will be gathered into one calm place.</Text>}
         </View>
-        {preview && !content && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 35 }]}><View style={wide ? styles.leftColumn : styles.stackedTitle}><Text style={[styles.number, { marginTop: 0 }]}>02</Text></View><View style={styles.rightColumn}><Text style={styles.itemTitle}>Three PRs merged in two days<Text style={styles.project}>  Monocode</Text></Text><Text style={styles.body}>hardbeat920 merged sidebar swipe navigation, Android header pill fix, and Android composer repair. Commented ‘this is great! thank you.’</Text></View></View>}
-        <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
+        {(preview || !!content?.events.length) && <View style={[styles.section, { flexDirection: wide ? "row" : "column", marginTop: 65, minHeight: 240 }]}>
           <View style={wide ? styles.leftColumn : styles.stackedTitle}><SectionTitle>Your day</SectionTitle>{content ? content.events.map((event, i) => <View key={i} style={styles.calendarEvent}><Text style={styles.eventTime}>{event.time}</Text><Text style={[styles.eventName, { flex: 1 }]}>{event.title}</Text></View>) : preview && <View style={styles.calendarEvent}><Text style={styles.eventTime}>12:15p</Text><Text style={styles.eventName}>Bachs Intro</Text></View>}</View>
-          <View style={styles.rightColumn}>{content ? content.events.length ? content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>) : <Text style={[styles.body, { marginTop: wide ? 48 : 0 }]}>No events to prepare for.</Text> : <><Text style={[styles.itemTitle, { marginTop: wide ? 48 : 0 }]}>{preview ? "Bachs Intro — 12:15 PM – 12:30 PM" : "Make space for your day"}</Text><Text style={styles.body}>{preview ? "15-minute introductory call via Google Meet." : "Connect your calendar to see your schedule and prepare for what’s next."}</Text>{preview && <View style={{ alignItems: "flex-end", marginTop: 28 }}><Starburst title="Prep me →" small onPress={() => setPrep(!prep)} /></View>}{prep && preview && <Text style={styles.actionDetail}>Before the call: review the invitation, write down your goals, and leave a few minutes to join.</Text>}</>}</View>
+          <View style={styles.rightColumn}>{content ? content.events.length ? content.events.map((event, i) => <View key={i} style={{ marginTop: i === 0 && wide ? 48 : 24 }}><Text style={styles.itemTitle}>{event.title} — {event.time}</Text><Text style={styles.body}>{event.body}</Text></View>) : <Text style={[styles.body, { marginTop: wide ? 48 : 0 }]}>No events to prepare for.</Text> : <><Text style={[styles.itemTitle, { marginTop: wide ? 48 : 0 }]}>{preview ? "Bachs Intro — 12:15 PM – 12:30 PM" : "Make space for your day"}</Text><Text style={styles.body}>{preview ? "15-minute introductory call via Google Meet." : "Connect your calendar to see your schedule and prepare for what’s next."}</Text>{preview && <View style={{ alignItems: "flex-end", marginTop: 28 }}><BriefBadge title="Prep me →" small onPress={() => setPrep(!prep)} /></View>}{prep && preview && <Text style={styles.actionDetail}>Before the call: review the invitation, write down your goals, and leave a few minutes to join.</Text>}</>}</View>
         </View>
+        }
         <View style={styles.footer}>
           <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <Image source={require("../../../assets/site-icons/github.png")} style={{ width: 20, height: 20, tintColor: "#eeeeeb" }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <Image source={require("../../../assets/site-icons/gmail.png")} style={{ width: 22, height: 18 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <Image source={require("../../../assets/site-icons/calendar.png")} style={{ width: 20, height: 20 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
           <Text style={styles.footerSmall}>{preview && !content ? "Preview content · No accounts connected" : "Your sources, with your permission."}</Text>
@@ -143,10 +149,11 @@ const styles = StyleSheet.create({
   previewLabel: { color: "#77756e", fontSize: 11 },
   heroThe: { color: "#ffe500", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "700", marginBottom: -4, transform: [{ translateY: 7 }] },
   heroTitle: { color: "#ffe500", fontFamily: "Georgia", fontWeight: "700", textAlign: "center", letterSpacing: -4 },
-  captionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginTop: 10, gap: 20 },
-  caption: { color: "#959187", fontFamily: "Georgia", fontStyle: "italic", fontSize: 13, flexShrink: 1 },
-  artCredit: { color: "#4f4d48", fontFamily: "Menlo", fontSize: 8, textAlign: "right", flexShrink: 1 },
-  feature: { backgroundColor: "#1f1f1e", borderRadius: 11, paddingHorizontal: 28, paddingTop: 30, paddingBottom: 36, marginTop: 43, minHeight: 224 },
+  captionRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 10, gap: 20 },
+  caption: { color: "#959187", fontFamily: "Georgia", fontStyle: "italic", fontSize: 13, flex: 1 },
+  artCredit: { color: "#4f4d48", fontFamily: "Menlo", fontSize: 8, textAlign: "right", flexShrink: 0 },
+  featureWrap: { position: "relative", zIndex: 10, marginTop: 43, marginBottom: 20 },
+  feature: { backgroundColor: "#1f1f1e", borderRadius: 11, paddingHorizontal: 28, paddingTop: 30, paddingBottom: 66, minHeight: 224 },
   leftColumn: { width: "42%", paddingRight: 28 },
   rightColumn: { flex: 1 },
   sectionTitle: { color: "#cccac4", fontFamily: "Georgia", fontStyle: "italic", fontSize: 23, lineHeight: 31 },

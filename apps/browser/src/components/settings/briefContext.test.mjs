@@ -54,7 +54,8 @@ test("Gmail collection is bounded and includes only brief message fields", async
     assert.equal(context.gmail[0].subject.length, 300);
     assert.equal(context.gmail[0].from.length, 300);
     assert.equal(context.gmail[0].snippet.length, 512);
-    assert.deepEqual(Object.keys(context.gmail[0]).sort(), ["date", "from", "id", "snippet", "subject"]);
+    assert.equal(context.gmail[0].url, "https://mail.google.com/mail/u/?authuser=test%40example.com#all/0");
+    assert.deepEqual(Object.keys(context.gmail[0]).sort(), ["date", "from", "id", "snippet", "subject", "url"]);
   } finally {
     gmailTest.status = status;
     gmailTest.messages = messages;

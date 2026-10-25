@@ -6,7 +6,7 @@ import { isIncognitoProfile } from "../store/model";
 import { briefDateFromUrl, briefDue, localBriefDate } from "./briefDates";
 import { retainedBriefDates } from "./briefRetention";
 
-import { parseBriefContent, type BriefContent } from "./briefContent";
+import { focusBriefLinks, parseBriefContent, updateBriefSource, type BriefContent } from "./briefContent";
 export type { BriefContent } from "./briefContent";
 type Entry = { content?: BriefContent; loading?: boolean; error?: string | null };
 export const useDailyBriefs = create<{ entries: Record<string, Entry> }>(() => ({ entries: {} }));
@@ -84,6 +84,12 @@ export async function generateBrief(profileId: string, date: string) {
     const raw = provider === "claude" ? await generateClaudeBrief(input, abort.signal) : await generateDailyBrief(input);
     if (abort.signal.aborted || provider !== useBrowser.getState().settings.dailyBriefProvider || consent !== JSON.stringify(useBrowser.getState().settings.dailyBriefSources)) throw new Error("Your sharing preferences changed. Generate a fresh brief with the new settings.");
     const content = parseBriefContent(raw);
+    content.focus.links = focusBriefLinks(content.focus, context.github);
+    content.updates = content.updates.map((item) => {
+      const source = updateBriefSource(item, context.github, context.gmail ?? []);
+      const { source: requestedSource, ...text } = item;
+      return source ? { ...text, source } : text;
+    });
     saveBrief(key, content);
     patch(key, { content, loading: false });
   } catch (error) {
