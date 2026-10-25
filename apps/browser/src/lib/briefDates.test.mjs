@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { briefDateFromUrl, briefDue, localBriefDate, parseBriefDate } from "./briefDates.ts";
-import { briefSummary, gmailBriefUrl, isSafeBriefSource, parseBriefContent } from "./briefContent.ts";
+import { briefSummary, focusDisplayLinks, gmailBriefUrl, isSafeBriefSource, parseBriefContent } from "./briefContent.ts";
 
 const settings = { dailyBriefEnabled: true, dailyBriefTime: "08:00", dailyBriefDelivery: "scheduled", dailyBriefLastOpened: "" };
 
@@ -100,4 +100,29 @@ test("brief summaries omit the repeated date and stay short at word boundaries",
   const text = briefSummary("Review the " + "important changes ".repeat(20));
   assert.ok(text.length <= 160);
   assert.match(text, /(?:changes|important)…$/);
+});
+
+
+test("focus popup only lists PRs explicitly mentioned in its visible text", () => {
+  const first = { title: "First PR", url: "https://github.com/owner/repo/pull/192" };
+  const second = { title: "Second PR", url: "https://github.com/owner/repo/pull/193" };
+  const email = { title: "Related email", kind: "gmail", url: "https://mail.google.com/mail/u/?authuser=person%40example.com#all/abc123def456" };
+  const focus = { title: "Prepare PR #192", body: "Read the review.", links: [first, second, email] };
+  assert.deepEqual(focusDisplayLinks(focus), [first]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, body: "Read #193 too." }), [first, second]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare pull request192" }), [first]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare the PRs" }), [first, second]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Read this email", links: [email] }), [email]);
+  const parsed = parseBriefContent(JSON.stringify({ summary: "Summary", focus, todos: [], updates: [], events: [] }));
+  assert.deepEqual(focusDisplayLinks(parsed.focus), [first]);
+});
+
+test("focus popup excludes ambiguous PR numbers unless the repository is explicit", () => {
+  const first = { title: "First PR", url: "https://github.com/owner/repo/pull/192" };
+  const second = { title: "Other PR", url: "https://github.com/another/project/pull/192" };
+  const focus = { title: "Prepare PR #192", body: "Read the review.", links: [first, second] };
+  assert.deepEqual(focusDisplayLinks(focus), []);
+  assert.deepEqual(focusDisplayLinks({ ...focus, body: "In owner/repo." }), [first]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, body: first.url }), [first]);
+  assert.deepEqual(focusDisplayLinks({ ...focus, title: "Prepare PR #1920" }), []);
 });

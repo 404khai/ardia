@@ -237,3 +237,19 @@ test("matching GitHub and Gmail titles stay ambiguous across all source types", 
   assert.deepEqual(generated.focus.links.map((link) => link.url), [github.url]);
   assert.equal(generated.updates[0].source.url, gmail.url);
 });
+
+
+test("generated focus ignores extra model citations when only one PR is mentioned", async () => {
+  setup();
+  const github = [{ title: "First PR", url: "https://github.com/owner/repo/pull/192", repository: "owner/repo" }, { title: "Other PR", url: "https://github.com/owner/repo/pull/193", repository: "owner/repo" }];
+  const gmail = [{ id: "abc123def456", subject: "Related email", url: "https://mail.google.com/mail/u/?authuser=person%40example.com#all/abc123def456" }];
+  globalThis.briefCollect = async () => ({ github, gmail, calendar: [] });
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Prepare PR #192", body: "Read the review.", sourceUrls: [...github.map((item) => item.url), gmail[0].url] } });
+  await generateBrief("default", localBriefDate());
+  let generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.deepEqual(generated.focus.links.map((link) => link.url), [github[0].url]);
+  globalThis.briefGenerate = async () => JSON.stringify({ ...content, focus: { title: "Prepare PR #192", body: "Read #193 too.", sourceUrls: [...github.map((item) => item.url), gmail[0].url] } });
+  await generateBrief("default", localBriefDate());
+  generated = useDailyBriefs.getState().entries[`default/${localBriefDate()}`].content;
+  assert.deepEqual(generated.focus.links.map((link) => link.url), github.map((item) => item.url));
+});

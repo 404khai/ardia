@@ -1,0 +1,29 @@
+import { registerBriefHover } from "./devDriver";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Image, View } from "react-native";
+
+type Service = "github" | "gmail" | "calendar";
+export function BriefFooterIcon({ service }: { service: Service }) {
+  const view = useRef<View>(null);
+  const [hovered, setHovered] = useState(false);
+  const motion = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!__DEV__) return;
+    const key = "footer:" + service;
+    registerBriefHover(key, { hovered, measure: () => new Promise((resolve) => { if (view.current) view.current.measureInWindow((x, y, width, height) => resolve([x, y, width, height])); else resolve([]); }) });
+    return () => registerBriefHover(key, null);
+  }, [hovered, service]);
+  useEffect(() => {
+    motion.stopAnimation();
+    if (service === "calendar") {
+      if (hovered) Animated.sequence([
+        Animated.timing(motion, { toValue: -5, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(motion, { toValue: 0, duration: 210, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]).start();
+      else motion.setValue(0);
+    } else Animated.timing(motion, { toValue: hovered ? service === "github" ? -13 : 13 : 0, duration: 180, useNativeDriver: true }).start();
+    return () => motion.stopAnimation();
+  }, [hovered, motion, service]);
+  const source = service === "github" ? require("../../../assets/site-icons/github.png") : service === "gmail" ? require("../../../assets/site-icons/gmail.png") : require("../../../assets/site-icons/calendar.png");
+  return <View ref={view} accessibilityLabel={service === "github" ? "GitHub" : service === "gmail" ? "Gmail" : "Google Calendar"} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center" }}><Animated.View pointerEvents="none" style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", transform: service === "calendar" ? [{ translateY: motion }] : [{ rotate: motion.interpolate({ inputRange: [-13, 13], outputRange: ["-13deg", "13deg"] }) }] }}><Image source={source} resizeMode="contain" style={{ width: service === "gmail" ? 22 : 20, height: service === "gmail" ? 16 : 20, ...(service === "github" ? { tintColor: "#eeeeeb" } : {}) }} /></Animated.View></View>;
+}

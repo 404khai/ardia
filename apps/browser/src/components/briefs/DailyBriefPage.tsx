@@ -2,9 +2,10 @@ import { useCallback, useState } from "react";
 import { BriefRail } from "@ardia/shell";
 import { BriefBadge } from "./BriefBadge";
 import { BriefSourceLink } from "./BriefSourceLink";
+import { BriefFooterIcon } from "./BriefFooterIcon";
 import { useWindowId } from "../../store/hooks";
 import { registerBriefView } from "./devDriver";
-import { briefSummary, type BriefContent } from "../../lib/briefContent";
+import { briefSummary, focusDisplayLinks, type BriefContent } from "../../lib/briefContent";
 export type { BriefContent } from "../../lib/briefContent";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { briefArtworkForDate, briefDate } from "./assets";
@@ -92,7 +93,7 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
           </View>
         </View>
         <View style={{ position: "absolute", left: 21, bottom: -26, zIndex: 20 }}>
-          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content?.focus.links} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? undefined : configure} />
+          <BriefBadge title={content || preview ? "Let's\ndo it →" : "Make it\nyours →"} links={content ? focusDisplayLinks(content.focus) : undefined} maxWidth={Math.max(220, Math.min(360, contentWidth - 42))} onPress={content || preview ? undefined : configure} />
         </View>
         </View>
         <View style={[styles.section, { flexDirection: wide ? "row" : "column" }]}>
@@ -122,7 +123,7 @@ export function DailyBriefPage({ date, onConfigure, content: generatedContent, l
         </View>
         }
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <Image source={require("../../../assets/site-icons/github.png")} style={{ width: 20, height: 20, tintColor: "#eeeeeb" }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <Image source={require("../../../assets/site-icons/gmail.png")} style={{ width: 22, height: 18 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <Image source={require("../../../assets/site-icons/calendar.png")} style={{ width: 20, height: 20 }} resizeMode="contain" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
+          <Text style={styles.footerText}>Made for you by <Image source={require("../../../assets/briefs/ardia-mark.png")} style={{ width: 22, height: 22 }} resizeMode="contain" /><Text style={styles.footerName}> Ardia</Text> using <Text style={{ fontStyle: "italic" }}>your</Text> <BriefFooterIcon service="github" /><Text style={styles.footerName}>{"\u00a0"}GitHub</Text>, <BriefFooterIcon service="gmail" /><Text style={styles.footerName}>{"\u00a0"}Gmail</Text>, and <BriefFooterIcon service="calendar" /><Text style={styles.footerName}>{"\u00a0"}Google Calendar</Text>.</Text>
           <Text style={styles.footerSmall}>{preview && !content ? "Preview content · No accounts connected" : "Your sources, with your permission."}</Text>
         </View>
         </View>

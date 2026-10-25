@@ -68,11 +68,30 @@ function sourceTitleMatches(item: BriefItem, title: string): boolean {
   return tokens.length >= 3 && matches >= 3 && matches / tokens.length >= 0.8;
 }
 
+export function focusDisplayLinks(focus: BriefContent["focus"]): BriefLink[] {
+  const links = (focus.links ?? []).filter((link, index, all) => !!briefSource(link.url) && all.findIndex((other) => other.url === link.url) === index);
+  const description = `${focus.title} ${focus.body}`;
+  const exactUrls = new Set(description.match(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*/g) ?? []);
+  const numbers = new Set([...description.matchAll(/(?:#|\bPR\s*#?|\bpull request\s*#?)([1-9]\d*)\b/gi)].map((match) => match[1]));
+  const github = links.filter((link) => briefSource(link.url)?.kind === "github");
+  if (!numbers.size && !exactUrls.size) return /\bPRs?\b|\bpull requests?\b/i.test(description) ? github : links;
+  const repos = new Set((description.match(/\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g) ?? []).map((repo) => repo.toLowerCase()));
+  return github.filter((link) => {
+    if (exactUrls.has(link.url)) return true;
+    const parts = link.url.split("/");
+    const number = parts.at(-1)!;
+    if (!numbers.has(number)) return false;
+    const sameNumber = github.filter((candidate) => candidate.url.split("/").at(-1) === number);
+    if (sameNumber.length === 1) return true;
+    return repos.has(`${parts[3]}/${parts[4]}`.toLowerCase());
+  });
+}
+
 export function focusBriefLinks(focus: BriefContent["focus"], candidates: BriefLink[], matchTitles = true): BriefLink[] {
   const requested = new Set([...(focus.links?.map((link) => link.url) ?? []), ...(focus.source ? [focus.source.url] : [])]);
   const description = `${focus.title} ${focus.body}`;
   const mentionedUrls = new Set(description.match(/https:\/\/(?:github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*|mail\.google\.com\/mail\/u\/(?:0\/|\?authuser=[^&#\s]+)#all\/[a-fA-F0-9]+)/g) ?? []);
-  const numbers = [...description.matchAll(/(?:\bPR\s*|pull request\s*)#?(\d+)\b/gi)].map((match) => match[1]);
+  const numbers = [...description.matchAll(/(?:#|\bPR\s*#?|\bpull request\s*#?)([1-9]\d*)\b/gi)].map((match) => match[1]);
   const explicit = candidates.filter((candidate) => {
     const source = briefSource(candidate.url);
     if (!source) return false;
@@ -85,7 +104,8 @@ export function focusBriefLinks(focus: BriefContent["focus"], candidates: BriefL
   });
   const titled = matchTitles && !explicit.length ? candidates.filter((candidate) => !!briefSource(candidate.url) && sourceTitleMatches(focus, candidate.title)) : [];
   const matched = explicit.length ? explicit : titled.length === 1 ? titled : [];
-  return matched.filter((candidate, index, all) => all.findIndex((other) => other.url === candidate.url) === index).slice(0, 5).map(({ title, url, kind }) => ({ title: title.slice(0, 240), url, ...(kind ? { kind } : {}) }));
+  const bound = matched.filter((candidate, index, all) => all.findIndex((other) => other.url === candidate.url) === index).slice(0, 5).map(({ title, url, kind }) => ({ title: title.slice(0, 240), url, ...(kind ? { kind } : {}) }));
+  return matchTitles ? focusDisplayLinks({ ...focus, links: bound }) : bound;
 }
 
 export function updateBriefSource(item: BriefItem, github: (BriefLink & { repository?: string })[], gmail: { id: string; url?: string; subject?: string }[]): BriefSource | undefined {
