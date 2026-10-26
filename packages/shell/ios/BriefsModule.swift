@@ -62,10 +62,10 @@ private struct BriefCredentialStore: Codable {
 private enum BriefSecrets {
   static let account = "Ardia Daily Briefs ChatGPT"
   private static var legacyIsolatedURL: URL? {
-    ACIsolatedDataDirectory().map { URL(fileURLWithPath: $0).appendingPathComponent("Brief Provider Credentials.json") }
+    ArdiaIsolatedDataDirectory().map { URL(fileURLWithPath: $0).appendingPathComponent("Brief Provider Credentials.json") }
   }
   static var query: [String: Any] {
-    let suffix = ACIsolatedDataDirectory().map { ":" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
+    let suffix = ArdiaIsolatedDataDirectory().map { ":" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
     return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "Ardia Connected Accounts", kSecAttrAccount as String: account + suffix]
   }
   static func load() throws -> BriefCredentialStore {
@@ -288,7 +288,6 @@ private actor BriefChatGPT {
     var fields = ["client_id": previous?.clientId ?? "dynamic_agent_client", "ext_agent_host_id": store.hostId, "response_type": "code", "redirect_uri": redirect, "scope": "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct", "resource": resource, "state": state, "nonce": nonce, "code_challenge_method": "S256", "code_challenge": encode(Data(SHA256.hash(data: Data(verifier.utf8))))]
     if previous == nil { fields["agent_name_hint"] = "Ardia" }
     if let email = previous?.email, !email.isEmpty { fields["login_hint"] = email }
-    if let idToken = previous?.idToken, !idToken.isEmpty { fields["id_token_hint"] = idToken }
     var url = URLComponents(string: "\(base)/api/accounts/authorize")!
     url.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
     pending = BriefSignIn(id: UUID(), callback: callback, nonce: nonce, verifier: verifier, redirect: redirect, previous: previous)

@@ -36,7 +36,7 @@ try {
   assert(refreshStart >= 0 && refreshEnd > refreshStart);
   provider = provider.slice(0, refreshStart) + '  private func refresh(_ credential: GmailCredential, generation: Int) async throws -> GmailCredential { await GmailRefreshFixture.shared.next(credential) }\n' + provider.slice(refreshEnd);
   provider = provider.replaceAll("private ", "");
-  const imports = 'import Foundation\nimport AppKit\nimport Network\nimport Security\nimport CryptoKit\nimport LocalAuthentication\nfunc ACIsolatedDataDirectory() -> String? { "/tmp/ardia-gmail-test-no-credentials" }\n';
+  const imports = 'import Foundation\nimport AppKit\nimport Network\nimport Security\nimport CryptoKit\nimport LocalAuthentication\nfunc ArdiaIsolatedDataDirectory() -> String? { "/tmp/ardia-gmail-test-no-credentials" }\n';
   const swift = join(scratch, "GmailTests.swift");
   const binary = join(scratch, "gmail-tests");
   await writeFile(swift, imports + callback + provider + fixture);

@@ -1,5 +1,6 @@
+import { briefColors, briefMotion } from "./tokens";
 import { useEffect, useRef, useState } from "react";
-import { Symbol } from "@ardia/shell";
+import { Symbol } from "../ui";
 import { Animated, Image, Linking, Pressable, Text, View } from "react-native";
 import { isSafeBriefSource, type BriefLink } from "../../lib/briefContent";
 
@@ -18,7 +19,7 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
   const hasArrow = /→\s*$/.test(title);
   const labelLines = title.replace(/\s*→\s*$/, "").split("\n");
   const finalLine = labelLines.pop() ?? "";
-  const labelStyle = { color: "#101010", fontFamily: "Georgia", fontStyle: "italic" as const, fontSize: small ? 15 : 22, textAlign: "center" as const, lineHeight: small ? 20 : 27 };
+  const labelStyle = { color: briefColors.background, fontFamily: "Georgia", fontStyle: "italic" as const, fontSize: small ? 15 : 22, textAlign: "center" as const, lineHeight: small ? 20 : 27 };
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -46,10 +47,10 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
     closeTimer.current = setTimeout(() => setHovered(false), 150);
   };
   useEffect(() => {
-    Animated.timing(tilt, { toValue: hovered ? 1 : 0, duration: 180, useNativeDriver: true }).start();
+    Animated.timing(tilt, { toValue: hovered ? 1 : 0, duration: briefMotion.tilt, useNativeDriver: true }).start();
     sheen.stopAnimation();
     sheen.setValue(-size);
-    if (hovered) Animated.timing(sheen, { toValue: size, duration: 650, useNativeDriver: true }).start();
+    if (hovered) Animated.timing(sheen, { toValue: size, duration: briefMotion.sheen, useNativeDriver: true }).start();
   }, [hovered, sheen, size, tilt]);
   useEffect(() => () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -60,21 +61,21 @@ export function BriefBadge({ title, onPress, small = false, links = [], maxWidth
     <View style={{ width: size, height: size, zIndex: hovered || showPopup ? 30 : 1 }}>
       <Pressable accessibilityRole="button" accessibilityLabel={title.replace("\n", " ")} onPress={press} onHoverIn={enter} onHoverOut={leave} style={({ pressed }) => ({ width: size, height: size, opacity: pressed ? 0.75 : 1 })}>
         <Animated.View pointerEvents="none" style={{ width: size, height: size, alignItems: "center", justifyContent: "center", transform: [{ rotate: tilt.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-8deg"] }) }] }}>
-          {rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, backgroundColor: "#ffe500", transform: [{ rotate: `${rotation}deg` }] }} />)}
-          {hovered && rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, overflow: "hidden", transform: [{ rotate: `${rotation}deg` }] }}><View style={{ position: "absolute", width: size, height: size, left: (face - size) / 2, top: (face - size) / 2, transform: [{ rotate: `${-rotation}deg` }] }}><Animated.View style={{ position: "absolute", width: size * 0.25, height: size * 2, top: -size / 2, left: size / 2, backgroundColor: "rgba(255,255,255,0.12)", transform: [{ translateX: sheen }, { rotate: "-22deg" }] }} /></View></View>)}
+          {rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, backgroundColor: briefColors.accent, transform: [{ rotate: `${rotation}deg` }] }} />)}
+          {hovered && rotations.map((rotation) => <View key={rotation} style={{ position: "absolute", width: face, height: face, overflow: "hidden", transform: [{ rotate: `${rotation}deg` }] }}><View style={{ position: "absolute", width: size, height: size, left: (face - size) / 2, top: (face - size) / 2, transform: [{ rotate: `${-rotation}deg` }] }}><Animated.View style={{ position: "absolute", width: size * 0.25, height: size * 2, top: -size / 2, left: size / 2, backgroundColor: briefColors.sheen, transform: [{ translateX: sheen }, { rotate: "-22deg" }] }} /></View></View>)}
           <View style={{ alignItems: "center", transform: [{ rotate: "-9deg" }] }}>
             {labelLines.map((line, index) => <Text key={index} style={labelStyle}>{line}</Text>)}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={labelStyle}>{finalLine}</Text>{hasArrow && <Symbol name="arrow.right" size={small ? 13 : 18} weight="medium" color="#101010" style={{ width: small ? 15 : 21, height: small ? 20 : 27 }} />}</View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={labelStyle}>{finalLine}</Text>{hasArrow && <Symbol name="arrow.right" size={small ? 13 : 18} weight="medium" color={briefColors.background} style={{ width: small ? 15 : 21, height: small ? 20 : 27 }} />}</View>
           </View>
         </Animated.View>
       </Pressable>
-      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: popupLeft, width: popupWidth, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#4d4a46", backgroundColor: "#2c2926", gap: 10 }}>
-        <Text style={{ color: "#eeeeeb", fontFamily: "Georgia", fontSize: 16 }}>Sources for this recommendation</Text>
-        <Text style={{ color: "#bbb7b0", fontSize: 13, lineHeight: 19 }}>{references.length ? "Open the sources behind this recommendation." : "Refresh this brief to load its source links."}</Text>
+      {showPopup && <Pressable onHoverIn={enter} onHoverOut={leave} style={{ position: "absolute", bottom: size + 12, left: popupLeft, width: popupWidth, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: briefColors.popoverBorder, backgroundColor: briefColors.popover, gap: 10 }}>
+        <Text style={{ color: briefColors.foreground, fontFamily: "Georgia", fontSize: 16 }}>Sources for this recommendation</Text>
+        <Text style={{ color: briefColors.popoverBody, fontSize: 13, lineHeight: 19 }}>{references.length ? "Open the sources behind this recommendation." : "Refresh this brief to load its source links."}</Text>
         {references.map((link) => {
           const kind = linkKind(link);
           const service = kind === "github" ? "GitHub" : "Gmail";
-          return <Pressable key={link.url} accessibilityRole="link" accessibilityLabel={link.title} tooltip={`Open in ${service}`} onPress={(event) => { event.stopPropagation(); void Linking.openURL(link.url).catch(() => {}); }} style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 5, opacity: pressed ? 0.75 : 1 })}><Image source={kind === "github" ? require("../../../assets/site-icons/github.png") : require("../../../assets/site-icons/gmail.png")} style={{ width: 17, height: kind === "gmail" ? 13 : 17, ...(kind === "github" ? { tintColor: "#eeeeeb" } : {}) }} resizeMode="contain" /><Text style={{ flex: 1, color: "#eeeeeb", fontSize: 13, lineHeight: 19 }}>{link.title}</Text></Pressable>;
+          return <Pressable key={link.url} accessibilityRole="link" accessibilityLabel={link.title} tooltip={`Open in ${service}`} onPress={(event) => { event.stopPropagation(); void Linking.openURL(link.url).catch(() => {}); }} style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 5, opacity: pressed ? 0.75 : 1 })}><Image source={kind === "github" ? require("../../../assets/site-icons/github.png") : require("../../../assets/site-icons/gmail.png")} style={{ width: 17, height: kind === "gmail" ? 13 : 17, ...(kind === "github" ? { tintColor: briefColors.foreground } : {}) }} resizeMode="contain" /><Text style={{ flex: 1, color: briefColors.foreground, fontSize: 13, lineHeight: 19 }}>{link.title}</Text></Pressable>;
         })}
       </Pressable>}
     </View>

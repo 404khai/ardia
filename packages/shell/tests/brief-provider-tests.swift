@@ -38,7 +38,7 @@ private actor BriefCompletionFlag {
     switch name {
     case "isolated-storage":
       let saved = try fixtureStore()
-      let path = URL(fileURLWithPath: ACIsolatedDataDirectory()!).appendingPathComponent("Brief Provider Credentials.json").path
+      let path = URL(fileURLWithPath: ArdiaIsolatedDataDirectory()!).appendingPathComponent("Brief Provider Credentials.json").path
       precondition(!FileManager.default.fileExists(atPath: path), "Isolated ChatGPT credentials were written as plaintext JSON")
       let account = BriefSecrets.query[kSecAttrAccount as String] as! String
       precondition(account.hasPrefix("Ardia Daily Briefs ChatGPT:"), "Isolated ChatGPT credentials share the production Keychain item")
@@ -46,7 +46,7 @@ private actor BriefCompletionFlag {
       precondition(loaded.hostId == saved.hostId)
     case "isolated-migration":
       let store = BriefCredentialStore(hostId: "urn:uuid:fixture-host", active: "fixture-client", accounts: ["fixture-client": BriefCredential(clientId: "fixture-client", subject: "fixture-subject", email: "fixture@example.invalid", accessToken: "fake-access", refreshToken: "fake-refresh", idToken: "fake-id", expiresAt: 42, scopes: ["resource.invoke"])])
-      let directory = URL(fileURLWithPath: ACIsolatedDataDirectory()!)
+      let directory = URL(fileURLWithPath: ArdiaIsolatedDataDirectory()!)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let url = directory.appendingPathComponent("Brief Provider Credentials.json")
       try JSONEncoder().encode(store).write(to: url, options: .atomic)
@@ -71,7 +71,7 @@ private actor BriefCompletionFlag {
       let result = try await provider.begin()
       let query = Dictionary(uniqueKeysWithValues: URLComponents(string: result["authorizationUrl"]!)!.queryItems!.map { ($0.name, $0.value!) })
       precondition(query["client_id"] == "registered-client")
-      precondition(query["id_token_hint"] == "fixture-id-token", "Reauthorization omitted the selected account identity hint")
+      precondition(query["id_token_hint"] == nil, "Reauthorization exposed an ID token in its URL")
       precondition(query["login_hint"] == "fixture@example.invalid")
       await provider.cancel()
     case "callback-prestart-cancel":

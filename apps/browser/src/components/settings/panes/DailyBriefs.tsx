@@ -1,16 +1,17 @@
-import { briefProviderStatus, cancelChatGPTSignIn, cancelGmailCollection, cancelGmailSignIn, connectChatGPT, connectGmail, disconnectChatGPT, disconnectGmail, gmailStatus, type BriefProviderStatus, type GmailStatus } from "@ardia/shell";
+import { briefProviderStatus, cancelChatGPTSignIn, cancelGmailCollection, cancelGmailSignIn, connectChatGPT, connectGmail, disconnectChatGPT, disconnectGmail, gmailStatus, type BriefProviderStatus, type GmailStatus } from "../../../state/briefs/connections";
 import { useEffect, useRef, useState } from "react";
-import { Linking, Text, View } from "react-native";
-import { focus } from "../../../lib/actions";
-import { localBriefDate } from "../../../lib/briefDates";
-import { openDailyBrief } from "../../../lib/dailyBriefs";
-import { useTheme } from "../../../lib/theme";
-import { connectCalendar, useCalendar } from "../../../live/calendar";
-import { useLive } from "../../../live/store";
-import { useBrowser } from "../../../store/browser";
-import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle } from "../controls";
-import { connectClaudeKey, disconnectClaude, hasClaudeKey } from "../briefContext";
-import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { Text, View } from "react-native";
+import { openExternalURL } from "../../../state/app/system";
+import { openBriefAuthorization as openAuthorization, openTodayBrief as openToday, saveGmailBriefPermission, setBriefSourcePermission } from "../../../state/briefs/settingsActions";
+import { useTheme } from "../../ui/theme";
+import { connectCalendar, useCalendar } from "../../../state/live/calendar";
+import { useLive } from "../../../state/live/store";
+import { useSettings } from "../../../state/browser/hooks";
+import { updateSettings as update } from "../../../state/settings/actions";
+import { Button, Checkbox, Group, PopUp, Sheet, TextField, Toggle } from "../../ui";
+import { Row, SectionHeader } from "../Form";
+import { connectClaudeKey, disconnectClaude, hasClaudeKey } from "../../../state/briefs/briefContext";
+import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { ConnectSheet } from "./LiveFolders";
 
 type Source = "gmail" | "calendar" | "github";
@@ -23,29 +24,9 @@ const SOURCE_DETAILS: Record<Source, string> = {
   github: "Connect through GitHub's account permission screen. The current sign-in requests repo and read:org access; review the permissions before approving. Connecting GitHub and allowing its data in a brief are separate choices.",
 };
 
-function browserWindow() {
-  const state = useBrowser.getState();
-  return state.ui.focusOrder.find((id) => state.windows[id] && !state.windows[id]!.incognito && state.windows[id]!.kind !== "small")
-    ?? state.windowOrder.find((id) => !state.windows[id]!.incognito && state.windows[id]!.kind !== "small")
-    ?? state.createWindow();
-}
-
-function openAuthorization(url: string) {
-  const id = browserWindow();
-  useBrowser.getState().newTab(id, { url });
-  focus(id);
-}
-
-function openToday() {
-  const id = browserWindow();
-  openDailyBrief(id, localBriefDate());
-  focus(id);
-}
-
 export function DailyBriefsPane() {
   const theme = useTheme();
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser.getState().updateSettings;
+  const settings = useSettings((s) => s);
   const provider = settings.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT";
   const [status, setStatus] = useState<BriefProviderStatus | null>(null);
   const [claudeConnected, setClaudeConnected] = useState(false);
@@ -101,7 +82,7 @@ export function DailyBriefsPane() {
           {connected ? <Button title="Disconnect" disabled={busy} onPress={() => void disconnect()} /> : settings.dailyBriefProvider === "chatgpt" ? <Button title={busy ? "Cancel Sign-In" : "Sign In…"} onPress={() => busy ? void cancelChatGPTSignIn().catch(() => {}) : void signIn()} /> : <Button title="Add API Key…" onPress={() => showSettingsSheet(<ClaudeKeySheet onSaved={() => void refreshProvider()} />)} />}
         </Row>
       </Group>
-      {providerError ? <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 17, color: "#E5534B" }}>{providerError}</Text> : null}
+      {providerError ? <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 17, color: theme.destructive }}>{providerError}</Text> : null}
       <SectionHeader title="Connected sources" description="Only sources you allow here are shared with your selected provider when generating. Revoke permission here at any time; this does not disconnect your other Ardia features." />
       <Group>
         <SourceRow source="gmail" />
@@ -134,7 +115,7 @@ function BriefTime({ value, onChange, disabled }: { value: string; onChange(valu
 }
 
 function SourceRow({ source }: { source: Source }) {
-  const consent = useBrowser((s) => s.settings.dailyBriefSources?.[source] ?? false);
+  const consent = useSettings((s) => s.dailyBriefSources?.[source] ?? false);
   const github = useLive((s) => s.accounts.github);
   const calendar = useCalendar((s) => s.access);
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
@@ -151,8 +132,8 @@ function SourceRow({ source }: { source: Source }) {
 
 function SourcePermission({ source }: { source: Exclude<Source, "gmail"> }) {
   const theme = useTheme();
-  const saved = useBrowser((s) => s.settings.dailyBriefSources?.[source] ?? false);
-  const provider = useBrowser((s) => s.settings.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT");
+  const saved = useSettings((s) => s.dailyBriefSources?.[source] ?? false);
+  const provider = useSettings((s) => s.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT");
   const [allowed, setAllowed] = useState(saved);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,8 +141,7 @@ function SourcePermission({ source }: { source: Exclude<Source, "gmail"> }) {
   const calendar = useCalendar((s) => s.access);
   const connected = source === "github" ? !!github : calendar === "fullAccess" || calendar === "fixture";
   const save = () => {
-    const state = useBrowser.getState();
-    state.updateSettings({ dailyBriefSources: { ...(state.settings.dailyBriefSources ?? { gmail: false, calendar: false, github: false }), [source]: allowed } });
+    setBriefSourcePermission(source, allowed);
   };
   const connect = async () => {
     save();
@@ -184,7 +164,7 @@ function SourcePermission({ source }: { source: Exclude<Source, "gmail"> }) {
       <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 16 }}>{SOURCE_DETAILS[source]}</Text>
       <Checkbox value={allowed} onChange={setAllowed} label={`Allow this source in briefs generated with ${provider}`} />
       <Text style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary, marginTop: 10 }}>Selected content will be sent to the provider you choose in settings. Changing providers clears this permission. Revoking permission stops future requests; content already sent to a provider cannot be recalled.</Text>
-      {error ? <Text style={{ fontSize: 12, lineHeight: 17, color: "#E5534B", marginTop: 12 }}>{error}</Text> : null}
+      {error ? <Text style={{ fontSize: 12, lineHeight: 17, color: theme.destructive, marginTop: 12 }}>{error}</Text> : null}
       <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
         <Button title="Cancel" disabled={busy} onPress={closeSettingsSheet} />
         {source === "github" ? <><Button title={connected ? "Reconnect GitHub…" : "Connect GitHub…"} disabled={busy} onPress={() => void connect()} /><Button title="Save Permission" kind="primary" disabled={busy} onPress={() => { save(); closeSettingsSheet(); }} /></> : !connected && allowed ? <Button title={busy ? "Connecting…" : "Continue to Connect…"} kind="primary" disabled={busy} onPress={() => void connect()} /> : <Button title="Save Permission" kind="primary" disabled={busy} onPress={() => { save(); closeSettingsSheet(); }} />}
@@ -195,8 +175,8 @@ function SourcePermission({ source }: { source: Exclude<Source, "gmail"> }) {
 
 function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; onChanged(status: GmailStatus): void }) {
   const theme = useTheme();
-  const saved = useBrowser((s) => s.settings.dailyBriefSources?.gmail ?? false);
-  const provider = useBrowser((s) => s.settings.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT");
+  const saved = useSettings((s) => s.dailyBriefSources?.gmail ?? false);
+  const provider = useSettings((s) => s.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT");
   const [status, setStatus] = useState(initial);
   const [allowed, setAllowed] = useState(saved);
   const [busy, setBusy] = useState(false);
@@ -211,8 +191,7 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
     return () => { active.current = false; void cancelGmailSignIn().catch(() => {}); };
   }, []);
   const clearSharing = () => {
-    const state = useBrowser.getState();
-    state.updateSettings({ dailyBriefSources: { ...state.settings.dailyBriefSources, gmail: false } });
+    setBriefSourcePermission("gmail", false);
     setAllowed(false);
     void cancelGmailCollection().catch(() => {});
   };
@@ -255,9 +234,7 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
     }
   };
   const save = () => {
-    const state = useBrowser.getState();
-    const currentProvider = state.settings.dailyBriefProvider === "claude" ? "Claude" : "ChatGPT";
-    state.updateSettings({ dailyBriefSources: { ...state.settings.dailyBriefSources, gmail: !!status?.connected && allowed && provider === currentProvider } });
+    saveGmailBriefPermission(!!status?.connected, allowed, provider);
     if (!allowed) void cancelGmailCollection().catch(() => {});
     closeSettingsSheet();
   };
@@ -268,7 +245,7 @@ function GmailPermission({ initial, onChanged }: { initial: GmailStatus | null; 
     {!status?.connected && !status?.clientSecretConfigured && <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 14 }}>{status ? "Gmail sign-in is not available in this build yet." : "Checking Gmail sign-in availability…"}</Text>}
     <Checkbox value={allowed} disabled={busy || !status?.connected} onChange={setAllowed} label={`Allow Gmail content in briefs generated with ${provider}`} />
     <Text style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary, marginTop: 10 }}>This sends selected message senders, subjects, dates and snippets to {provider}. Changing providers clears this permission. Revoking permission stops future sharing; content already sent cannot be recalled.</Text>
-    {error && <Text style={{ fontSize: 12, lineHeight: 17, color: "#E5534B", marginTop: 12 }}>{error}</Text>}
+    {error && <Text style={{ fontSize: 12, lineHeight: 17, color: theme.destructive, marginTop: 12 }}>{error}</Text>}
     <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
       <Button title={busy && !disconnecting ? "Cancel Sign-In" : "Cancel"} disabled={disconnecting} onPress={closeSettingsSheet} />
       {status?.connected ? <><Button title="Disconnect" disabled={busy} onPress={() => void disconnect()} /><Button title="Save Permission" kind="primary" disabled={busy} onPress={save} /></> : <Button title={busy ? "Waiting for Google…" : "Continue with Google…"} kind="primary" disabled={busy || !status?.clientSecretConfigured} onPress={() => void connect()} />}
@@ -300,9 +277,9 @@ function ClaudeKeySheet({ onSaved }: { onSaved(): void }) {
       <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 12 }}>Connect Claude</Text>
       <Text style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary, marginBottom: 14 }}>Create a personal API key scoped to one workspace in Claude Console. It is stored in macOS Keychain. Claude API usage is billed separately from your Claude subscription.</Text>
       <TextField value={key} onChangeText={setKey} secure placeholder="sk-ant-…" onSubmit={() => !busy && key.trim() && void save()} />
-      {error ? <Text style={{ fontSize: 12, lineHeight: 17, color: "#E5534B", marginTop: 10 }}>{error}</Text> : null}
+      {error ? <Text style={{ fontSize: 12, lineHeight: 17, color: theme.destructive, marginTop: 10 }}>{error}</Text> : null}
       <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
-        <Button title="Get API Key" onPress={() => void Linking.openURL("https://platform.claude.com/settings/keys")} />
+        <Button title="Get API Key" onPress={() => void openExternalURL("https://platform.claude.com/settings/keys")} />
         <Button title="Cancel" disabled={busy} onPress={closeSettingsSheet} />
         <Button title={busy ? "Checking…" : "Save API Key"} kind="primary" disabled={busy || !key.trim()} onPress={() => void save()} />
       </View>

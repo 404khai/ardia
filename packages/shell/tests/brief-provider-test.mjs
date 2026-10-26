@@ -38,7 +38,7 @@ try {
   assert(source.includes(marker));
   const provider = source.slice(source.indexOf(marker)).replace('private let resource = "https://api.openai.com/v1"', 'private let resource = ProcessInfo.processInfo.environment["ARDIA_BRIEF_TEST_RESOURCE"]!');
   assert(provider.includes('private let resource = ProcessInfo.processInfo.environment["ARDIA_BRIEF_TEST_RESOURCE"]!'));
-  const imports = 'import Foundation\nimport Network\nimport Security\nimport CryptoKit\nimport LocalAuthentication\nfunc ACIsolatedDataDirectory() -> String? { ProcessInfo.processInfo.environment["ARDIA_BRIEF_TEST_DATA"] }\n';
+  const imports = 'import Foundation\nimport Network\nimport Security\nimport CryptoKit\nimport LocalAuthentication\nfunc ArdiaIsolatedDataDirectory() -> String? { ProcessInfo.processInfo.environment["ARDIA_BRIEF_TEST_DATA"] }\n';
   const swift = join(scratch, "ProviderTests.swift");
   const binary = join(scratch, "provider-tests");
   await writeFile(swift, imports + provider + fixture);

@@ -1,9 +1,10 @@
+import { briefColors, briefMotion } from "./tokens";
 import { useCallback, useState } from "react";
-import { BriefRail } from "@ardia/shell";
+import { BriefRail } from "../ui";
 import { BriefBadge } from "./BriefBadge";
 import { BriefSourceLink } from "./BriefSourceLink";
 import { BriefFooterIcon } from "./BriefFooterIcon";
-import { useWindowId } from "../../store/hooks";
+import { useWindowId } from "../../state/browser/hooks";
 import { registerBriefView } from "./devDriver";
 import { briefEventTime, briefSummary, focusDisplayLinks, type BriefContent } from "../../lib/briefContent";
 export type { BriefContent } from "../../lib/briefContent";
@@ -52,7 +53,7 @@ export function DailyBriefPage({ date, onConfigure, content, loading = false, er
         </View>
         <View style={{ width, height: heroHeight, justifyContent: "center", alignItems: "center" }}>
           <View style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, overflow: "hidden" }}><Image source={artwork.source} style={{ position: "absolute", top: (heroHeight - artworkHeight) / 2, left: (contentWidth - artworkWidth) / 2, width: artworkWidth, height: artworkHeight }} resizeMode="cover" accessibilityLabel={`${artwork.title} by ${artwork.artist}`} /></View>
-          <View pointerEvents="none" style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, backgroundColor: "rgba(0,0,0,0.09)" }} />
+          <View pointerEvents="none" style={{ position: "absolute", top: 0, left: gutter, width: contentWidth, height: heroHeight, backgroundColor: briefColors.artShade }} />
           <Text style={[styles.heroThe, { fontSize: contentWidth / 18, lineHeight: contentWidth / 15 }]}>The</Text>
           <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroTitle, { fontSize: titleSize, lineHeight: titleSize * 1.2, width: contentWidth * 0.98 }]}>{weekday} Brief</Text>
           {rails && <>
@@ -120,44 +121,44 @@ function TodoItems({ items }: { items: BriefContent["todos"] }) {
   return <>{items.map((item) => {
     const identity = JSON.stringify([item.title, item.body, item.source?.url]);
     return <View key={identity} style={{ flexDirection: "row", gap: 14, marginBottom: 22 }}>
-    <Pressable accessibilityRole="checkbox" accessibilityLabel={item.title} accessibilityState={{ checked: completed.has(identity) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(identity)) next.delete(identity); else next.add(identity); return next; })} style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(identity) ? "#ffe500" : "#53534f", backgroundColor: completed.has(identity) ? "#ffe500" : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(identity) && <Text style={styles.checkmark}>✓</Text>}</Pressable>
-    <View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(identity) && { textDecorationLine: "line-through", color: "#77756e" }]}>{item.title}</Text><Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text></View>
+    <Pressable accessibilityRole="checkbox" accessibilityLabel={item.title} accessibilityState={{ checked: completed.has(identity) }} onPress={() => setCompleted((previous) => { const next = new Set(previous); if (next.has(identity)) next.delete(identity); else next.add(identity); return next; })} style={{ width: 17, height: 17, borderRadius: 9, borderWidth: 1, borderColor: completed.has(identity) ? briefColors.accent : briefColors.checkboxBorder, backgroundColor: completed.has(identity) ? briefColors.accent : "transparent", marginTop: 3, justifyContent: "center", alignItems: "center" }}>{completed.has(identity) && <Text style={styles.checkmark}>✓</Text>}</Pressable>
+    <View style={{ flex: 1 }}><Text style={[styles.itemTitle, completed.has(identity) && { textDecorationLine: "line-through", color: briefColors.completed }]}>{item.title}</Text><Text style={styles.body}>{item.body}{item.source && <> <BriefSourceLink source={item.source} /></>}</Text></View>
   </View>;
   })}</>;
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#101010" },
+  root: { flex: 1, backgroundColor: briefColors.background },
   scroll: { paddingTop: 20, paddingBottom: 50 },
   masthead: { height: 37, alignItems: "center", justifyContent: "flex-start" },
   mastheadLogo: { width: 26, height: 26 },
-  heroThe: { color: "#ffe500", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "700", marginBottom: -4, transform: [{ translateY: 7 }] },
-  heroTitle: { color: "#ffe500", fontFamily: "Georgia", fontWeight: "700", textAlign: "center", letterSpacing: -4 },
+  heroThe: { color: briefColors.accent, fontFamily: "Georgia", fontStyle: "italic", fontWeight: "700", marginBottom: -4, transform: [{ translateY: 7 }] },
+  heroTitle: { color: briefColors.accent, fontFamily: "Georgia", fontWeight: "700", textAlign: "center", letterSpacing: -4 },
   captionRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 10, gap: 20 },
-  caption: { color: "#959187", fontFamily: "Georgia", fontStyle: "italic", fontSize: 13, flex: 1 },
-  artCredit: { color: "#4f4d48", fontFamily: "Menlo", fontSize: 8, textAlign: "right", flexShrink: 0 },
+  caption: { color: briefColors.caption, fontFamily: "Georgia", fontStyle: "italic", fontSize: 13, flex: 1 },
+  artCredit: { color: briefColors.credit, fontFamily: "Menlo", fontSize: 8, textAlign: "right", flexShrink: 0 },
   featureWrap: { position: "relative", zIndex: 10, marginTop: 43, marginBottom: 20 },
-  feature: { backgroundColor: "#1f1f1e", borderRadius: 11, paddingHorizontal: 28, paddingTop: 30, paddingBottom: 66, minHeight: 224 },
+  feature: { backgroundColor: briefColors.card, borderRadius: 11, paddingHorizontal: 28, paddingTop: 30, paddingBottom: 66, minHeight: 224 },
   leftColumn: { width: "42%", paddingRight: 28 },
   rightColumn: { flex: 1 },
-  sectionTitle: { color: "#cccac4", fontFamily: "Georgia", fontStyle: "italic", fontSize: 23, lineHeight: 31 },
-  itemTitle: { color: "#e5e5e1", fontSize: 16, fontWeight: "600", lineHeight: 24 },
-  body: { color: "#969187", fontSize: 15, lineHeight: 28, marginTop: 7 },
+  sectionTitle: { color: briefColors.heading, fontFamily: "Georgia", fontStyle: "italic", fontSize: 23, lineHeight: 31 },
+  itemTitle: { color: briefColors.title, fontSize: 16, fontWeight: "600", lineHeight: 24 },
+  body: { color: briefColors.body, fontSize: 15, lineHeight: 28, marginTop: 7 },
   section: { marginHorizontal: 22, marginTop: 64 },
   stackedTitle: { marginBottom: 20 },
-  checkmark: { fontSize: 12, color: "#101010" },
-  number: { color: "#4a4843", fontFamily: "Georgia", fontSize: 13, marginTop: 24 },
-  project: { color: "#757168", fontFamily: "Georgia", fontStyle: "italic", fontWeight: "400", fontSize: 14 },
-  calendarEvent: { marginTop: 20, marginLeft: -7, marginRight: -14, backgroundColor: "#20201e", borderRadius: 5, paddingHorizontal: 9, paddingVertical: 10, flexDirection: "row", alignItems: "baseline", gap: 12 },
-  eventTime: { width: 56, flexShrink: 0, fontFamily: "Menlo", fontSize: 11.5, lineHeight: 22, color: "#969187" },
-  eventName: { flex: 1, minWidth: 0, color: "#e5e5e1", fontSize: 15, lineHeight: 22, fontWeight: "600" },
+  checkmark: { fontSize: 12, color: briefColors.background },
+  number: { color: briefColors.number, fontFamily: "Georgia", fontSize: 13, marginTop: 24 },
+  project: { color: briefColors.project, fontFamily: "Georgia", fontStyle: "italic", fontWeight: "400", fontSize: 14 },
+  calendarEvent: { marginTop: 20, marginLeft: -7, marginRight: -14, backgroundColor: briefColors.event, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 10, flexDirection: "row", alignItems: "baseline", gap: 12 },
+  eventTime: { width: 56, flexShrink: 0, fontFamily: "Menlo", fontSize: 11.5, lineHeight: 22, color: briefColors.body },
+  eventName: { flex: 1, minWidth: 0, color: briefColors.title, fontSize: 15, lineHeight: 22, fontWeight: "600" },
   footer: { marginTop: 70, alignItems: "center", gap: 20, paddingHorizontal: 10 },
-  footerText: { color: "#8d8a82", fontFamily: "Georgia", fontSize: 20, textAlign: "center", lineHeight: 30 },
-  footerName: { color: "#eeeeeb" },
-  footerSmall: { color: "#65625b", fontFamily: "Georgia", fontSize: 13 },
-  setupButton: { alignSelf: "flex-start", marginTop: 20, borderBottomWidth: 1, borderBottomColor: "#ffe500", paddingBottom: 3 },
-  setupButtonText: { color: "#ffe500", fontSize: 14 },
+  footerText: { color: briefColors.footer, fontFamily: "Georgia", fontSize: 20, textAlign: "center", lineHeight: 30 },
+  footerName: { color: briefColors.foreground },
+  footerSmall: { color: briefColors.footerSmall, fontFamily: "Georgia", fontSize: 13 },
+  setupButton: { alignSelf: "flex-start", marginTop: 20, borderBottomWidth: 1, borderBottomColor: briefColors.accent, paddingBottom: 3 },
+  setupButtonText: { color: briefColors.accent, fontSize: 14 },
   generateRow: { alignItems: "flex-end", marginTop: 18, marginBottom: -22 },
-  generateButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: "#484530" },
-  error: { color: "#e6a296", fontSize: 13, lineHeight: 21, marginTop: 30 },
+  generateButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: briefColors.buttonBorder },
+  error: { color: briefColors.error, fontSize: 13, lineHeight: 21, marginTop: 30 },
 });

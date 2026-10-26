@@ -1,27 +1,26 @@
-import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
-import { useBrowser } from "../../store/browser";
-import { bookmarkProfileId } from "../../store/model";
-import { setPageProgress } from "../../store/pageProgress";
-import { generateBrief, loadDailyBrief, useDailyBriefs } from "../../lib/dailyBriefs";
+import { generateBrief, loadDailyBrief, useDailyBriefs } from "../../state/briefs/dailyBriefs";
 import { DailyBriefPage } from "../briefs/DailyBriefPage";
 import { briefTitleForDate } from "../briefs/assets";
 import { briefDateFromUrl, localBriefDate } from "../../lib/briefDates";
-import { openSettings } from "../settings/windows";
+import { openSettings } from "../../state/settings/settingsWindows";
+import { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
+import { useTab } from "../../state/browser/hooks";
+import { currentTab } from "../../state/browser/current";
+import { useTabBookmarkProfileId } from "../../state/bookmarks/hooks";
+import { updateLive, updateTab } from "../../state/tabs/actions";
+import { setPageProgress } from "../../state/tabs/pageProgress";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
-import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "./urls";
+import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "../../state/pages/urls";
 
 export function InternalPage({ tabId }: { tabId: string }) {
-  const url = useBrowser((s) => {
-    const t = s.tabs[tabId];
-    return t ? tabDestination(t) : "";
-  });
+  const url = useTab(tabId, (t) => (t ? tabDestination(t) : ""));
   const page = internalPageOf(url);
   const date = briefDateFromUrl(url);
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const bookmarkProfile = useBrowser((s) => bookmarkProfileId(s, s.windows[s.tabs[tabId]?.windowId ?? ""]));
+  const profileId = useTab(tabId, (t) => t?.profileId ?? "");
+  const bookmarkProfile = useTabBookmarkProfileId(tabId);
 
   const brief = useDailyBriefs((s) => s.entries[`${profileId}/${date}`]);
   useEffect(() => {
@@ -30,10 +29,10 @@ export function InternalPage({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     if (!page) return;
-    const t = useBrowser.getState().tabs[tabId];
-    const title = page === "brief" ? briefTitleForDate(briefDateFromUrl(url)) : INTERNAL_PAGES[page].title;
-    if (t && (t.url !== url || t.title !== title)) useBrowser.getState().updateTab(tabId, { url, title, favicon: null });
-    useBrowser.getState().updateLive(tabId, { isLoading: false, canGoBack: false, canGoForward: false });
+    const t = currentTab(tabId);
+    const title = page === "brief" ? briefTitleForDate(date) : INTERNAL_PAGES[page].title;
+    if (t && (t.url !== url || t.title !== title)) updateTab(tabId, { url, title, favicon: null });
+    updateLive(tabId, { isLoading: false, canGoBack: false, canGoForward: false });
     setPageProgress(tabId, 0);
   }, [page, url]);
 

@@ -61,7 +61,7 @@ private struct GmailStore: Codable {
 
 private enum GmailSecrets {
   static var query: [String: Any] {
-    let suffix = ACIsolatedDataDirectory().map { ":" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
+    let suffix = ArdiaIsolatedDataDirectory().map { ":" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? ""
     return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "Ardia Connected Accounts", kSecAttrAccount as String: "Ardia Daily Briefs Gmail" + suffix]
   }
   static func load() throws -> GmailStore {

@@ -54,6 +54,8 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   stay ⏸.
 
 ## Building features
+- **Conventions.** Folders, import direction, tokens, state, names, the translation layer and environment
+  variables follow `docs/conventions.md`; its check runs in `pnpm -C apps/browser test`.
 - **Sources of truth.** `docs/dia-feature-parity.md` is the checklist; update its row when you ship.
   `docs/dia-spec.md` has Dia's measured values.
 - **Match Dia with numbers.** Compare against a capture with the same crop and the same state; "looks
@@ -79,6 +81,8 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   - Verify in proportion. A JS-only change needs no app build (Metro reloads it); run the checks for what
     you changed, each once before and once after, plus one final pass of the nearby checks. The full suite
     and Codex are for engine, native lifetime, focus, quit or security changes, and run once at the end.
+  - After a fix, test that fix and move on. Don't re-run the full suite, the whole release sequence or
+    checks that already passed; run only what covers the fix (the failed row, the smoke checks for its area).
 - **Build safely.** Build the app with `scripts/agent/build-app --as <you>`: quiet, in parallel with other agents'
   builds, and it refuses JS-only changes. Run `pod install`/`pnpm install` and Chromium builds through
   `scripts/agent/locked <pod|chromium> -- <command>` (usage in the script); its lock dies with its holder.
